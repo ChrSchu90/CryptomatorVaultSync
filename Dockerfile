@@ -15,6 +15,7 @@ RUN set -eux; \
         tini \
         ca-certificates \
         fuse3 \
+        davfs2 \
         rsync; \
     apt-get autoremove -y; \
     apt-get clean; \
@@ -42,6 +43,11 @@ RUN set -eux; \
 
 # Add project binaries
 COPY --chmod=755 run.sh /run.sh
+
+# /sync             Source root dir with files that should be synced
+# /vault-encrypted  Encrypted Cryptomator vault mount
+# /vault-decrypted  Decrypted Cryptomator vault mount
+VOLUME ["/sync", "/vault-encrypted", "/vault-decrypted"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/run.sh"]

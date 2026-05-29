@@ -1,0 +1,21 @@
+services:
+  cryptomator-vault-sync:
+    image: cryptomator-vault-sync
+    container_name: cryptomator-vault-sync
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    security_opt:
+      - apparmor:unconfined
+    environment:
+      TZ: Europe/Berlin
+      CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"
+      CRYPTOMATOR_MOUNT_MODE: auto  # fuse, webdav, auto
+      CRYPTOMATOR_WEBDAV_URL: http://localhost:8080/DemoVault/ # URL encoded vault, e.g. http://localhost:8080/OneDrive%20Vault/
+      RSYNC_DELETE: true
+      RSYNC_EXTRA_ARGS: 
+    volumes:
+      - '/docker/cryptomator-vault-sync/sync:/sync:ro'
+      - '/docker/cryptomator-vault-sync/vault-encrypted:/vault-encrypted'
+      - '/docker/cryptomator-vault-sync/vault-decrypted:/vault-decrypted'
