@@ -16,7 +16,7 @@ services:
       CRYPTOMATOR_MOUNT_MODE: auto                        # Optional [default=auto] fuse, webdav, auto
       MOUNT_TIMEOUT_SECONDS: 60                           # Optional [default=60]
       SYNC_INTERVAL_MINUTES: 0                            # Optional 0=one-time [default=0]
-      RSYNC_DELETE: true                                  # Optional [default=false]
+      RSYNC_DELETE: false                                 # Optional [default=false] Do not enable unless /sync is intended to be the authoritative source!
       RSYNC_ARGS: '-rtv --no-owner --no-group --no-perms' # Optional [default=-rtv --no-owner --no-group --no-perms]
       RSYNC_EXTRA_ARGS:                                   # Optional [default=]
       TZ: Europe/Berlin                                   # Optional
