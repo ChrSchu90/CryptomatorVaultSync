@@ -10,12 +10,21 @@ services:
       - apparmor:unconfined
     environment:
       TZ: Europe/Berlin
+      SYNC_DIR: /sync
+      VAULT_ENCRYPTED_DIR: /vault-encrypted
+      VAULT_DECRYPTED_DIR: /vault-decrypted
       CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"
       CRYPTOMATOR_MOUNT_MODE: auto  # fuse, webdav, auto
       CRYPTOMATOR_WEBDAV_URL: http://localhost:8080/DemoVault/ # URL encoded vault, e.g. http://localhost:8080/OneDrive%20Vault/
+      MOUNT_TIMEOUT_SECONDS: 60
+      SYNC_INTERVAL_MINUTES: 0  # 0=one-time
       RSYNC_DELETE: true
       RSYNC_EXTRA_ARGS: 
     volumes:
       - '/docker/cryptomator-vault-sync/sync:/sync:ro'
-      - '/docker/cryptomator-vault-sync/vault-encrypted:/vault-encrypted'
-      - '/docker/cryptomator-vault-sync/vault-decrypted:/vault-decrypted'
+      - 'vault-encrypted:/vault-encrypted'
+      - 'vault-decrypted:/vault-decrypted'
+
+volumes:
+  vault-encrypted:
+  vault-decrypted:
