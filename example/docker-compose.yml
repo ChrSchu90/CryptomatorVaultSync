@@ -9,22 +9,21 @@ services:
     security_opt:
       - apparmor:unconfined
     environment:
-      TZ: Europe/Berlin
-      SYNC_DIR: /sync
-      VAULT_ENCRYPTED_DIR: /vault-encrypted
-      VAULT_DECRYPTED_DIR: /vault-decrypted
-      CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"
-      CRYPTOMATOR_MOUNT_MODE: auto  # fuse, webdav, auto
-      MOUNT_TIMEOUT_SECONDS: 60
-      SYNC_INTERVAL_MINUTES: 0  # 0=one-time
-      RSYNC_DELETE: true
-      RSYNC_ARGS: '-rtv --no-owner --no-group --no-perms'
-      RSYNC_EXTRA_ARGS: 
+      CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"       # Required
+      SYNC_DIR: /sync                                     # Optional [default=/sync]
+      VAULT_ENCRYPTED_DIR: /vault-encrypted               # Optional [default=/vault-encrypted]
+      VAULT_DECRYPTED_DIR: /vault-decrypted               # Optional [default=/vault-decrypted]
+      CRYPTOMATOR_MOUNT_MODE: auto                        # Optional [default=auto] fuse, webdav, auto
+      MOUNT_TIMEOUT_SECONDS: 60                           # Optional [default=60]
+      SYNC_INTERVAL_MINUTES: 0                            # Optional 0=one-time [default=0]
+      RSYNC_DELETE: true                                  # Optional [default=false]
+      RSYNC_ARGS: '-rtv --no-owner --no-group --no-perms' # Optional [default=-rtv --no-owner --no-group --no-perms]
+      RSYNC_EXTRA_ARGS:                                   # Optional [default=]
+      TZ: Europe/Berlin                                   # Optional
     volumes:
-      - '/docker/cryptomator-vault-sync/sync:/sync:ro'
-      - 'vault-encrypted:/vault-encrypted'
-      - 'vault-decrypted:/vault-decrypted'
+      - '/docker/cryptomator-vault-sync/sync:/sync:ro'           # You can also mount multiple sub-directoies, but /sync must be the root dir.
+      - '/docker/cryptomator-vault-sync/vault:/vault-encrypted'  # A cruptomator vault must be inside the mount, can also be linked to a OneDrive synced directory
+      - 'vault-decrypted:/vault-decrypted'                       # Files will not visible from host!
 
 volumes:
-  vault-encrypted:
   vault-decrypted:
