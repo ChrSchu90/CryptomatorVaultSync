@@ -3,11 +3,11 @@ services:
     image: cryptomator-vault-sync
     container_name: cryptomator-vault-sync
     cap_add:
-      - SYS_ADMIN
+      - SYS_ADMIN                                         # Required
     devices:
-      - /dev/fuse:/dev/fuse
+      - /dev/fuse:/dev/fuse                               # Required 
     security_opt:
-      - apparmor:unconfined
+      - apparmor:unconfined                               # Required
     environment:
       CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"       # Required
       SYNC_DIR: /sync                                     # Optional [default=/sync]
@@ -23,7 +23,7 @@ services:
     volumes:
       - '/docker/cryptomator-vault-sync/sync:/sync:ro'           # You can also mount multiple sub-directoies, but /sync must be the root dir.
       - '/docker/cryptomator-vault-sync/vault:/vault-encrypted'  # A cruptomator vault must be inside the mount, can also be linked to a OneDrive synced directory
-      - 'vault-decrypted:/vault-decrypted'                       # Files will not visible from host!
+      - 'vault-decrypted:/vault-decrypted'                       # Files are not visible from host! To see the content use the /sync directory
 
 volumes:
   vault-decrypted:
