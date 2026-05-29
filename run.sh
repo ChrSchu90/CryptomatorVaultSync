@@ -1,4 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 
 echo "Started..."
-tail -f /dev/null
+
+ls -larth /opt
+
+ls -larth /opt/cryptomator-cli
+
+exec tail -f /dev/null
