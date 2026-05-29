@@ -7,7 +7,6 @@ VAULT_DECRYPTED_DIR="${VAULT_DECRYPTED_DIR:-/vault-decrypted}"
 VAULT_DECRYPTED_BASE_DEV=""
 
 CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-fuse}"
-CRYPTOMATOR_WEBDAV_URL="${CRYPTOMATOR_WEBDAV_URL:-}"
 
 RSYNC_DELETE="${RSYNC_DELETE:-false}"
 RSYNC_ARGS="${RSYNC_ARGS:--rtv --no-owner --no-group --no-perms}"
@@ -138,16 +137,30 @@ sync_once() {
 unlock_fuse() {
   log "Unlocking vault via FUSE..."
 
-  printf '%s' "$VAULT_PASSWORD" | cryptomator-cli unlock \
+  local password_file="/tmp/cryptomator-password"
+  local cryptomator_log="/tmp/cryptomator-fuse.log"
+
+  : > "$cryptomator_log"
+
+  umask 077
+  printf '%s\n' "$VAULT_PASSWORD" > "$password_file"
+
+  cryptomator-cli unlock \
     --password:stdin \
     --mounter=org.cryptomator.frontend.fuse.mount.LinuxFuseMountProvider \
     --mountPoint="$VAULT_DECRYPTED_DIR" \
-    "$VAULT_ENCRYPTED_DIR" &
+    "$VAULT_ENCRYPTED_DIR" \
+    < "$password_file" \
+    > "$cryptomator_log" \
+    2>&1 &
 
   CRYPTOMATOR_PID="$!"
 
+  rm -f "$password_file"
+
   if ! wait_for_mountpoint "$MOUNT_TIMEOUT_SECONDS"; then
     log "FUSE unlock failed."
+    cat "$cryptomator_log" >&2 || true
     return 1
   fi
 
@@ -155,38 +168,93 @@ unlock_fuse() {
 }
 
 unlock_webdav() {
-  log "Unlocking vault via WebDAV fallback..."
+  log "Unlocking vault via WebDAV..."
 
-  : "${CRYPTOMATOR_WEBDAV_URL:?CRYPTOMATOR_WEBDAV_URL is required for WebDAV mode}"
+  local cryptomator_log="/tmp/cryptomator-webdav.log"
+  local password_file="/tmp/cryptomator-password"
+  local davfs_error_log="/tmp/davfs2-mount-error.log"
+  local davfs_secrets_tmp="/tmp/davfs2-secrets"
+  local webdav_url=""
+  local davfs_user="${CRYPTOMATOR_WEBDAV_USERNAME:-cryptomator}"
+  local davfs_pass="${CRYPTOMATOR_WEBDAV_PASSWORD:-cryptomator}"
 
-  printf '%s' "$VAULT_PASSWORD" | cryptomator-cli unlock \
+  : > "$cryptomator_log"
+  : > "$davfs_error_log"
+
+  umask 077
+  printf '%s\n' "$VAULT_PASSWORD" > "$password_file"
+
+  cryptomator-cli unlock \
     --password:stdin \
     --mounter=org.cryptomator.frontend.webdav.mount.FallbackMounter \
-    "$VAULT_ENCRYPTED_DIR" &
+    "$VAULT_ENCRYPTED_DIR" \
+    < "$password_file" \
+    > "$cryptomator_log" \
+    2>&1 &
 
   CRYPTOMATOR_PID="$!"
 
-  log "Waiting for WebDAV endpoint: $CRYPTOMATOR_WEBDAV_URL"
+  rm -f "$password_file"
+
+  log "Waiting for Cryptomator WebDAV URL..."
 
   for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
-    if mount -t davfs \
-      -o username=,uid="$(id -u)",gid="$(id -g)",rw \
-      "$CRYPTOMATOR_WEBDAV_URL" \
-      "$VAULT_DECRYPTED_DIR" 2>/dev/null; then
-      WEBDAV_MOUNTED="true"
-      log "Vault unlocked via WebDAV and mounted to $VAULT_DECRYPTED_DIR."
-      return 0
+    webdav_url="$(
+      sed -n 's/.*Unlocked and mounted vault successfully to \(http:\/\/[^[:space:]]*\).*/\1/p' "$cryptomator_log" | tail -n1
+    )"
+
+    if [[ -n "$webdav_url" ]]; then
+      log "Detected WebDAV endpoint: $webdav_url"
+      break
     fi
 
     if [[ -n "${CRYPTOMATOR_PID}" ]] && ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
-      log "Cryptomator CLI exited before WebDAV could be mounted."
+      log "Cryptomator CLI exited before WebDAV URL could be detected."
+      cat "$cryptomator_log" >&2 || true
       return 1
     fi
 
     sleep 1
   done
 
+  if [[ -z "$webdav_url" ]]; then
+    log "WebDAV URL could not be detected."
+    cat "$cryptomator_log" >&2 || true
+    return 1
+  fi
+
+  log "Preparing davfs2 credentials..."
+
+  mkdir -p /etc/davfs2
+  touch /etc/davfs2/secrets
+  chmod 600 /etc/davfs2/secrets
+
+  grep -vF "$webdav_url" /etc/davfs2/secrets > "$davfs_secrets_tmp" || true
+  mv "$davfs_secrets_tmp" /etc/davfs2/secrets
+
+  printf '%s %s %s\n' "$webdav_url" "$davfs_user" "$davfs_pass" >> /etc/davfs2/secrets
+  chmod 600 /etc/davfs2/secrets
+
+  log "Mounting WebDAV endpoint to $VAULT_DECRYPTED_DIR"
+
+  for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
+    : > "$davfs_error_log"
+
+    if mount -t davfs \
+      -o uid="$(id -u)",gid="$(id -g)",rw,nouser \
+      "$webdav_url" \
+      "$VAULT_DECRYPTED_DIR" \
+      2>"$davfs_error_log"; then
+      WEBDAV_MOUNTED="true"
+      log "Vault unlocked via WebDAV and mounted to $VAULT_DECRYPTED_DIR."
+      return 0
+    fi
+
+    sleep 1
+  done
+
   log "WebDAV mount failed."
+  cat "$davfs_error_log" >&2 || true
   return 1
 }
 
@@ -202,10 +270,6 @@ validate_config() {
       fail "invalid CRYPTOMATOR_MOUNT_MODE: $CRYPTOMATOR_MOUNT_MODE. Allowed values: fuse, webdav, auto"
       ;;
   esac
-
-  if [[ "$CRYPTOMATOR_MOUNT_MODE" == "webdav" && -z "$CRYPTOMATOR_WEBDAV_URL" ]]; then
-    fail "CRYPTOMATOR_WEBDAV_URL is required when CRYPTOMATOR_MOUNT_MODE=webdav"
-  fi
 
   if [[ "$RSYNC_DELETE" != "true" && "$RSYNC_DELETE" != "false" ]]; then
     fail "RSYNC_DELETE must be true or false"
