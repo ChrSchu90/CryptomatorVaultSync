@@ -19,6 +19,7 @@ services:
       MOUNT_TIMEOUT_SECONDS: 60
       SYNC_INTERVAL_MINUTES: 0  # 0=one-time
       RSYNC_DELETE: true
+      RSYNC_ARGS: '-rtv --no-owner --no-group --no-perms'
       RSYNC_EXTRA_ARGS: 
     volumes:
       - '/docker/cryptomator-vault-sync/sync:/sync:ro'

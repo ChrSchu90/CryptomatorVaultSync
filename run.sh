@@ -4,11 +4,13 @@ set -Eeuo pipefail
 SYNC_DIR="${SYNC_DIR:-/sync}"
 VAULT_ENCRYPTED_DIR="${VAULT_ENCRYPTED_DIR:-/vault-encrypted}"
 VAULT_DECRYPTED_DIR="${VAULT_DECRYPTED_DIR:-/vault-decrypted}"
+VAULT_DECRYPTED_BASE_DEV=""
 
 CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-fuse}"
 CRYPTOMATOR_WEBDAV_URL="${CRYPTOMATOR_WEBDAV_URL:-}"
 
 RSYNC_DELETE="${RSYNC_DELETE:-false}"
+RSYNC_ARGS="${RSYNC_ARGS:--rtv --no-owner --no-group --no-perms}"
 RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
 
 MOUNT_TIMEOUT_SECONDS="${MOUNT_TIMEOUT_SECONDS:-60}"
@@ -34,30 +36,48 @@ fail() {
 cleanup() {
   log "Cleaning up..."
 
+  trap - EXIT INT TERM
+
   if mountpoint -q "$VAULT_DECRYPTED_DIR"; then
     log "Unmounting decrypted vault: $VAULT_DECRYPTED_DIR"
 
-    if [[ "$WEBDAV_MOUNTED" == "true" ]]; then
-      umount "$VAULT_DECRYPTED_DIR" 2>/dev/null || true
-    else
-      fusermount3 -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
-        fusermount -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
-        umount "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
-        true
-    fi
+    fusermount3 -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
+      fusermount -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
+      umount "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
+      umount -l "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
+      true
   fi
 
   if [[ -n "${CRYPTOMATOR_PID}" ]] && kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
     log "Stopping Cryptomator CLI..."
-    kill -INT "$CRYPTOMATOR_PID" 2>/dev/null || true
+
+    kill -TERM "$CRYPTOMATOR_PID" 2>/dev/null || true
+
+    for _ in $(seq 1 5); do
+      if ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
+        wait "$CRYPTOMATOR_PID" 2>/dev/null || true
+        CRYPTOMATOR_PID=""
+        log "Cryptomator CLI stopped."
+        WEBDAV_MOUNTED="false"
+        return 0
+      fi
+      sleep 1
+    done
+
+    log "Cryptomator CLI did not stop after SIGTERM, sending SIGKILL..."
+    kill -KILL "$CRYPTOMATOR_PID" 2>/dev/null || true
     wait "$CRYPTOMATOR_PID" 2>/dev/null || true
+    CRYPTOMATOR_PID=""
+    log "Cryptomator CLI killed."
   fi
 
   CRYPTOMATOR_PID=""
   WEBDAV_MOUNTED="false"
 }
 
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 require_dir() {
   local dir="$1"
@@ -71,20 +91,22 @@ require_dir() {
 require_empty_mountpoint() {
   mkdir -p "$VAULT_DECRYPTED_DIR"
 
-  if mountpoint -q "$VAULT_DECRYPTED_DIR"; then
-    fail "already mounted: $VAULT_DECRYPTED_DIR"
-  fi
-
   if find "$VAULT_DECRYPTED_DIR" -mindepth 1 -maxdepth 1 | read -r; then
     fail "vault decrypted dir must be empty: $VAULT_DECRYPTED_DIR"
   fi
+
+  VAULT_DECRYPTED_BASE_DEV="$(stat -c '%d' "$VAULT_DECRYPTED_DIR")"
+  log "Base device for decrypted vault dir: $VAULT_DECRYPTED_BASE_DEV"
 }
 
 wait_for_mountpoint() {
   local timeout_seconds="${1:-60}"
+  local current_dev=""
 
   for _ in $(seq 1 "$timeout_seconds"); do
-    if mountpoint -q "$VAULT_DECRYPTED_DIR"; then
+    current_dev="$(stat -c '%d' "$VAULT_DECRYPTED_DIR")"
+
+    if [[ "$current_dev" != "$VAULT_DECRYPTED_BASE_DEV" ]]; then
       return 0
     fi
 
@@ -108,7 +130,7 @@ sync_once() {
   log "Syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
 
   # shellcheck disable=SC2086
-  rsync -av "${delete_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
+  rsync $RSYNC_ARGS "${delete_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
 
   log "Sync finished."
 }
