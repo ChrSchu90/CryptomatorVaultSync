@@ -1,0 +1,11 @@
+FROM debian:trixie-slim@sha256:b6e2a152f22a40ff69d92cb397223c906017e1391a73c952b588e51af8883bf8
+
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+ARG CRYPTOMATOR_CLI_VERSION=0.6.2
+
+# Add project binaries
+COPY --chmod=755 run.sh /run.sh
+
+CMD [ "/run.sh" ]
