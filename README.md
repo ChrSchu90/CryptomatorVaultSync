@@ -34,7 +34,7 @@ Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative sour
 - Clean shutdown and unmount handling
 - Configurable one-shot or interval-based sync
 - Simple exit-code behavior
-- Healthcheck with optional write of test file
+- Healthcheck
 - Optional `rclone` to remote destinations
 
 ## 📋 Requirements
@@ -110,7 +110,6 @@ Directory for the optional `rclone.conf` in case `RCLONE_ENABLED=true`
 | `RSYNC_EXTRA_ARGS`             | empty              | Additional rsync arguments                                           |
 | `MOUNT_TIMEOUT_SECONDS`        | `60`               | Timeout for mount operations                                         |
 | `SYNC_INTERVAL_MINUTES`        | `0`                | `0` means one-shot mode; any positive value enables continuous sync  |
-| `HEALTHCHECK_WRITE_TEST`       | `false`            | If `true`, enables an extended write test inside the healthcheck     |
 | `RCLONE_ENABLED`               | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
 | `RCLONE_MODE`                  | `sync`             | rclone operation mode. Supported values: `sync (one-way vault -> cloud)` , `copy (one-way vault -> cloud, no deletes)` |
 | `RCLONE_DESTINATIONS`          | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault` |
