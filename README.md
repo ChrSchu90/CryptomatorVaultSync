@@ -166,7 +166,7 @@ services:
 
 ## ⚡ One-shot mode
 
-Set:
+Set a 0 interval:
 
 ```env
 SYNC_INTERVAL_MINUTES=0
@@ -189,10 +189,24 @@ Set a positive interval:
 ```env
 SYNC_INTERVAL_MINUTES=5
 ```
+`SYNC_INTERVAL_MINUTES` defines the delay between completed sync cycles, not a fixed time like cron.
 
-The container will run a full sync cycle every 5 minutes. Each cycle unlocks the vault, syncs files into it, unmounts it, and optionally runs rclone.
+The container will run a full sync cycle every 5 minutes. Each cycle the container will:
 
-`SYNC_INTERVAL_MINUTES` defines the delay between completed sync cycles, not a fixed wall-clock schedule.
+1. Unlock the vault
+2. Sync files from `/sync` into the decrypted vault view
+3. Unmount the vault
+4. Optionally run rclone against `/vault-encrypted`
+5. Wait until next cycle
+
+In continuous mode, the container does not keep the decrypted vault mounted between sync cycles.
+
+This is intentional. The optional rclone step syncs the encrypted vault directory `/vault-encrypted` to one or more remote destinations. To avoid syncing the vault while Cryptomator is still writing to it, the decrypted vault is unmounted before rclone starts. 
+This is also useful when `/vault-encrypted` is bind-mounted to a host directory that is synced upstream by the host itself, for example by Synology Drive, Google Drive, OneDrive, or another backup/sync tool. By unmounting the decrypted vault before the upstream sync starts, the host-side sync tool is more likely to see a stable encrypted vault state instead of files that Cryptomator is still updating.
+
+This gives rclone a stable, closed encrypted vault state to upload.
+
+The trade-off is that each cycle needs to unlock and mount the vault again. This is slightly less efficient, but safer for remote sync targets.
 
 ## 🔗 Mount modes
 
