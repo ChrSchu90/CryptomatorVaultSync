@@ -50,6 +50,9 @@ jobs:
     - name: Cosign Setup
       uses: sigstore/cosign-installer@v4.1.2
 
+    - name: Run Tests
+      run: chmod +x ./test.sh && ./test.sh
+
     - name: Docker Login
       uses: docker/login-action@v4
       if: ${{ steps.tagver.outputs.is_valid == 'true' }}

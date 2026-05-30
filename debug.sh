@@ -7,6 +7,8 @@ IMAGE_NAME="cryptomator-vault-sync:dev"
 DOCKER_PLATFORM=linux/amd64 # linux/amd64 linux/arm64/v8
 CRYPTOMATOR_CLI_VERSION="0.6.2"
 
+mkdir -p ./debug/sync ./debug/vault ./debug/rclone
+
 # Create Rclone config
 #docker run --rm -it -v ./debug/rclone:/rclone rclone/rclone config --config /rclone/rclone.conf
 

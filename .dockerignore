@@ -27,6 +27,8 @@
 **/debug
 **/release
 **/example
+**/tests
 LICENSE
 README.md
 debug.sh
+test.sh
