@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+EXIT_OK=0
+EXIT_GENERAL_ERROR=1
+EXIT_CONFIG_ERROR=2
+
 SYNC_DIR="${SYNC_DIR:-/sync}"
+
 VAULT_ENCRYPTED_DIR="${VAULT_ENCRYPTED_DIR:-/vault-encrypted}"
 VAULT_DECRYPTED_DIR="/vault-decrypted" # The vault-decrypted mount is internally, since the host can not see the content anyways
 VAULT_DECRYPTED_BASE_DEV=""
+VAULT_PASSWORD=""
 
 CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-auto}"
 
@@ -15,30 +21,34 @@ RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
 MOUNT_TIMEOUT_SECONDS="${MOUNT_TIMEOUT_SECONDS:-60}"
 SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
 
-: "${CRYPTOMATOR_VAULT_PASSWORD:?CRYPTOMATOR_VAULT_PASSWORD is required}"
-
-VAULT_PASSWORD="$CRYPTOMATOR_VAULT_PASSWORD"
-unset CRYPTOMATOR_VAULT_PASSWORD
-
 CRYPTOMATOR_PID=""
 WEBDAV_MOUNTED="false"
 
-log() {
-  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+log_info() {
+  printf '[%s] \033[34mINF\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
 
-fail() {
-  log "ERROR: $*"
-  exit 1
+log_warn() {
+  printf '[%s] \033[38;5;208mWRN\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
 
-cleanup() {
-  log "Cleaning up..."
+log_error() {
+  printf '[%s] \033[31mERR\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+}
 
-  trap - EXIT INT TERM
+exit_failed() {
+  local exit_code="$1"
+  shift
+
+  log_error "$*"
+  exit "$exit_code"
+}
+
+cleanup_resources() {
+  log_info "Cleaning up..."
 
   if mountpoint -q "$VAULT_DECRYPTED_DIR"; then
-    log "Unmounting decrypted vault: $VAULT_DECRYPTED_DIR"
+    log_info "Unmounting decrypted vault: $VAULT_DECRYPTED_DIR"
 
     fusermount3 -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
       fusermount -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
@@ -48,7 +58,7 @@ cleanup() {
   fi
 
   if [[ -n "${CRYPTOMATOR_PID}" ]] && kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
-    log "Stopping Cryptomator CLI..."
+    log_info "Stopping Cryptomator CLI..."
 
     kill -TERM "$CRYPTOMATOR_PID" 2>/dev/null || true
 
@@ -56,34 +66,39 @@ cleanup() {
       if ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
         wait "$CRYPTOMATOR_PID" 2>/dev/null || true
         CRYPTOMATOR_PID=""
-        log "Cryptomator CLI stopped."
+        log_info "Cryptomator CLI stopped."
         WEBDAV_MOUNTED="false"
         return 0
       fi
       sleep 1
     done
 
-    log "Cryptomator CLI did not stop after SIGTERM, sending SIGKILL..."
+    log_warn "Cryptomator CLI did not stop after SIGTERM, sending SIGKILL..."
     kill -KILL "$CRYPTOMATOR_PID" 2>/dev/null || true
     wait "$CRYPTOMATOR_PID" 2>/dev/null || true
     CRYPTOMATOR_PID=""
-    log "Cryptomator CLI killed."
+    log_warn "Cryptomator CLI killed."
   fi
 
   CRYPTOMATOR_PID=""
   WEBDAV_MOUNTED="false"
 }
 
+cleanup() {
+  trap - EXIT INT TERM
+  cleanup_resources
+}
+
 trap cleanup EXIT
-trap 'cleanup; exit 130' INT
-trap 'cleanup; exit 143' TERM
+trap 'cleanup; exit "$EXIT_OK"' INT
+trap 'cleanup; exit "$EXIT_OK"' TERM
 
 require_dir() {
   local dir="$1"
   local name="$2"
 
   if [[ ! -d "$dir" ]]; then
-    fail "$name does not exist: $dir"
+    exit_failed "$EXIT_CONFIG_ERROR" "$name does not exist: $dir"
   fi
 }
 
@@ -91,11 +106,11 @@ require_empty_mountpoint() {
   mkdir -p "$VAULT_DECRYPTED_DIR"
 
   if find "$VAULT_DECRYPTED_DIR" -mindepth 1 -maxdepth 1 | read -r; then
-    fail "vault decrypted dir must be empty: $VAULT_DECRYPTED_DIR"
+    exit_failed "$EXIT_CONFIG_ERROR" "vault decrypted dir must be empty: $VAULT_DECRYPTED_DIR"
   fi
 
   VAULT_DECRYPTED_BASE_DEV="$(stat -c '%d' "$VAULT_DECRYPTED_DIR")"
-  log "Base device for decrypted vault dir: $VAULT_DECRYPTED_BASE_DEV"
+  log_info "Base device for decrypted vault dir: $VAULT_DECRYPTED_BASE_DEV"
 }
 
 wait_for_mountpoint() {
@@ -126,16 +141,23 @@ sync_once() {
     delete_args=(--delete)
   fi
 
-  log "Syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
+  log_info "Syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
 
+  set +e
   # shellcheck disable=SC2086
   rsync $RSYNC_ARGS "${delete_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
+  local rsync_exit_code="$?"
+  set -e
 
-  log "Sync finished."
+  if [[ "$rsync_exit_code" -ne 0 ]]; then
+    exit_failed "$EXIT_GENERAL_ERROR" "rsync failed with exit code $rsync_exit_code"
+  fi
+
+  log_info "Sync finished."
 }
 
 unlock_fuse() {
-  log "Unlocking vault via FUSE..."
+  log_info "Unlocking vault via FUSE..."
 
   local password_file="/tmp/cryptomator-password"
   local cryptomator_log="/tmp/cryptomator-fuse.log"
@@ -159,16 +181,16 @@ unlock_fuse() {
   rm -f "$password_file"
 
   if ! wait_for_mountpoint "$MOUNT_TIMEOUT_SECONDS"; then
-    log "FUSE unlock failed."
+    log_error "FUSE unlock failed."
     cat "$cryptomator_log" >&2 || true
     return 1
   fi
 
-  log "Vault unlocked via FUSE."
+  log_info "Vault unlocked via FUSE."
 }
 
 unlock_webdav() {
-  log "Unlocking vault via WebDAV..."
+  log_info "Unlocking vault via WebDAV..."
 
   local cryptomator_log="/tmp/cryptomator-webdav.log"
   local password_file="/tmp/cryptomator-password"
@@ -196,7 +218,7 @@ unlock_webdav() {
 
   rm -f "$password_file"
 
-  log "Waiting for Cryptomator WebDAV URL..."
+  log_info "Waiting for Cryptomator WebDAV URL..."
 
   for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
     webdav_url="$(
@@ -204,12 +226,12 @@ unlock_webdav() {
     )"
 
     if [[ -n "$webdav_url" ]]; then
-      log "Detected WebDAV endpoint: $webdav_url"
+      log_info "Detected WebDAV endpoint: $webdav_url"
       break
     fi
 
     if [[ -n "${CRYPTOMATOR_PID}" ]] && ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
-      log "Cryptomator CLI exited before WebDAV URL could be detected."
+      log_error "Cryptomator CLI exited before WebDAV URL could be detected."
       cat "$cryptomator_log" >&2 || true
       return 1
     fi
@@ -218,12 +240,12 @@ unlock_webdav() {
   done
 
   if [[ -z "$webdav_url" ]]; then
-    log "WebDAV URL could not be detected."
+    log_error "WebDAV URL could not be detected."
     cat "$cryptomator_log" >&2 || true
     return 1
   fi
 
-  log "Preparing davfs2 credentials..."
+  log_info "Preparing davfs2 credentials..."
 
   mkdir -p /etc/davfs2
   touch /etc/davfs2/secrets
@@ -235,7 +257,7 @@ unlock_webdav() {
   printf '%s %s %s\n' "$webdav_url" "$davfs_user" "$davfs_pass" >> /etc/davfs2/secrets
   chmod 600 /etc/davfs2/secrets
 
-  log "Mounting WebDAV endpoint to $VAULT_DECRYPTED_DIR"
+  log_info "Mounting WebDAV endpoint to $VAULT_DECRYPTED_DIR"
 
   for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
     : > "$davfs_error_log"
@@ -246,14 +268,14 @@ unlock_webdav() {
       "$VAULT_DECRYPTED_DIR" \
       2>"$davfs_error_log"; then
       WEBDAV_MOUNTED="true"
-      log "Vault unlocked via WebDAV and mounted to $VAULT_DECRYPTED_DIR."
+      log_info "Vault unlocked via WebDAV and mounted to $VAULT_DECRYPTED_DIR."
       return 0
     fi
 
     sleep 1
   done
 
-  log "WebDAV mount failed."
+  log_error "WebDAV mount failed."
   cat "$davfs_error_log" >&2 || true
   return 1
 }
@@ -263,36 +285,50 @@ validate_config() {
   require_dir "$VAULT_ENCRYPTED_DIR" "encrypted vault dir"
   require_empty_mountpoint
 
+  if [[ -z "${CRYPTOMATOR_VAULT_PASSWORD:-}" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD is required"
+  fi
+
   case "$CRYPTOMATOR_MOUNT_MODE" in
     fuse|webdav|auto)
       ;;
     *)
-      fail "invalid CRYPTOMATOR_MOUNT_MODE: $CRYPTOMATOR_MOUNT_MODE. Allowed values: fuse, webdav, auto"
+      exit_failed "$EXIT_CONFIG_ERROR" "invalid CRYPTOMATOR_MOUNT_MODE: $CRYPTOMATOR_MOUNT_MODE. Allowed values: fuse, webdav, auto"
       ;;
   esac
 
   if [[ "$RSYNC_DELETE" != "true" && "$RSYNC_DELETE" != "false" ]]; then
-    fail "RSYNC_DELETE must be true or false"
+    exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_DELETE must be true or false"
   fi
 
   if ! [[ "$SYNC_INTERVAL_MINUTES" =~ ^[0-9]+$ ]]; then
-    fail "SYNC_INTERVAL_MINUTES must be a non-negative integer"
+    exit_failed "$EXIT_CONFIG_ERROR" "SYNC_INTERVAL_MINUTES must be a non-negative integer"
   fi
+
+  if ! [[ "$MOUNT_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || [[ "$MOUNT_TIMEOUT_SECONDS" == "0" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "MOUNT_TIMEOUT_SECONDS must be a positive integer"
+  fi
+}
+
+load_password() {
+  VAULT_PASSWORD="$CRYPTOMATOR_VAULT_PASSWORD"
+  unset CRYPTOMATOR_VAULT_PASSWORD
 }
 
 mount_vault() {
   case "$CRYPTOMATOR_MOUNT_MODE" in
     fuse)
-      unlock_fuse
+      unlock_fuse || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using FUSE"
       ;;
     webdav)
-      unlock_webdav
+      unlock_webdav || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using WebDAV"
       ;;
     auto)
       if ! unlock_fuse; then
-        cleanup
+        log_warn "FUSE mount failed, trying WebDAV fallback..."
+        cleanup_resources
         require_empty_mountpoint
-        unlock_webdav
+        unlock_webdav || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using FUSE and WebDAV fallback"
       fi
       ;;
   esac
@@ -301,11 +337,11 @@ mount_vault() {
 run_sync() {
   if [[ "$SYNC_INTERVAL_MINUTES" == "0" ]]; then
     sync_once
-    log "One-shot sync finished."
+    log_info "One-shot sync finished."
     return 0
   fi
 
-  log "Continuous sync enabled. Interval: ${SYNC_INTERVAL_MINUTES} minute(s)"
+  log_info "Continuous sync enabled. Interval: ${SYNC_INTERVAL_MINUTES} minute(s)"
 
   while true; do
     sync_once
@@ -315,6 +351,7 @@ run_sync() {
 
 main() {
   validate_config
+  load_password
   mount_vault
   run_sync
 }
