@@ -44,6 +44,11 @@ RUN set -eux; \
 
 # Add project binaries
 COPY --chmod=755 run.sh /run.sh
+COPY --chmod=755 healthcheck.sh /healthcheck.sh
+
+# Healthcheck is only relevant for continuous sync mode, check is ignored internally in one-shot mode
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD ["/healthcheck.sh"]
 
 # /sync             Source root dir with files that should be synced
 # /vault-encrypted  Encrypted Cryptomator vault mount

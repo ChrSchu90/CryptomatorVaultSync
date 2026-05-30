@@ -42,6 +42,7 @@ Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative sour
 - Clean shutdown and unmount handling
 - Configurable one-shot or interval-based sync
 - Simple exit-code behavior
+- Healthcheck with optional write of test file
 
 ## 📋 Requirements
 
@@ -114,8 +115,7 @@ Do not bind-mount this path for normal one-way sync usage.
 | `RSYNC_EXTRA_ARGS`             | empty              | Additional rsync arguments                                           |
 | `MOUNT_TIMEOUT_SECONDS`        | `60`               | Timeout for mount operations                                         |
 | `SYNC_INTERVAL_MINUTES`        | `0`                | `0` means one-shot mode; any positive value enables continuous sync  |
-| `CRYPTOMATOR_WEBDAV_USERNAME`  | `cryptomator` | Username used by `davfs2` for the local WebDAV mount                      |
-| `CRYPTOMATOR_WEBDAV_PASSWORD`  | `cryptomator` | Password used by `davfs2` for the local WebDAV mount                      |
+| `HEALTHCHECK_WRITE_TEST`       | `false`            | If `true`, enables an extended write test inside the healthcheck     |
 
 ## 🏷️ Image Labels
 

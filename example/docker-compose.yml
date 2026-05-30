@@ -18,6 +18,7 @@ services:
       RSYNC_DELETE: false                                 # Optional [default=false] Do not enable unless /sync is intended to be the authoritative source!
       RSYNC_ARGS: '-rtv --no-owner --no-group --no-perms' # Optional [default=-rtv --no-owner --no-group --no-perms]
       RSYNC_EXTRA_ARGS:                                   # Optional [default=]
+      HEALTHCHECK_WRITE_TEST: false                       # Optional [default=false]
       TZ: Europe/Berlin                                   # Optional
     volumes:
       - '/docker/cryptomator-vault-sync/sync:/sync:ro'           # One-Way sync source, you can also mount multiple sub-directories, but /sync must be the root directory.
