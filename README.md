@@ -35,6 +35,7 @@ Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative sour
 - Configurable one-shot or interval-based sync
 - Simple exit-code behavior
 - Healthcheck with optional write of test file
+- Optional `rclone` to remote destinations
 
 ## 📋 Requirements
 
