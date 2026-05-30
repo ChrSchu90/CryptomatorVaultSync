@@ -181,7 +181,8 @@ The container will:
 1. Unlock the vault
 2. Sync files from `/sync` into the decrypted vault view
 3. Unmount the vault
-4. Exit
+4. Optionally run rclone against `/vault-encrypted`
+5. Exit
 
 Use a scheduler for one-shot runs if you do not want the vault to remain unlocked continuously.
 
@@ -193,9 +194,9 @@ Set a positive interval:
 SYNC_INTERVAL_MINUTES=5
 ```
 
-The container will keep the vault mounted and run `rsync` every 5 minutes.
+The container will run a full sync cycle every 5 minutes. Each cycle unlocks the vault, syncs files into it, unmounts it, and optionally runs rclone.
 
-Use this only if you are comfortable with the vault staying unlocked while the container is running.
+`SYNC_INTERVAL_MINUTES` defines the delay between completed sync cycles, not a fixed wall-clock schedule.
 
 ## 🔗 Mount modes
 
@@ -213,10 +214,10 @@ CRYPTOMATOR_MOUNT_MODE=fuse
 > ```bash
 > ls -l /dev/fuse
 > ```
->A typical successful result looks like:
->```text
->crw-rw-rw- 1 root users 10, 229 ... /dev/fuse
->```
+> A typical successful result looks like:
+> ```text
+> crw-rw-rw- 1 root users 10, 229 ... /dev/fuse
+> ```
 
 ### `webdav`
 

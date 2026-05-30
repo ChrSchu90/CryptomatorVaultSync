@@ -54,8 +54,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # /sync             Source root dir with files that should be synced
 # /vault-encrypted  Encrypted Cryptomator vault mount
 # /vault-decrypted  Internal temporary mount point. The host usually cannot see its contents because the mount is created inside the container namespace.
-# /rclone-config    Config file for optional rclone to e.g. Google Drive or OneDrive
-VOLUME ["/sync", "/vault-encrypted" "/rclone"]
+# /rclone           Config file directory for optional rclone to e.g. Google Drive or OneDrive
+VOLUME ["/sync", "/vault-encrypted", "/rclone"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/run.sh"]
