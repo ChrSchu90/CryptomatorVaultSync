@@ -118,7 +118,7 @@ Do not bind-mount this path for normal one-way sync usage.
 | `HEALTHCHECK_WRITE_TEST`       | `false`            | If `true`, enables an extended write test inside the healthcheck     |
 | `RCLONE_ENABLED`               | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
 | `RCLONE_MODE`                  | `sync`             | rclone operation mode. Supported values: `sync (one-way local vault -> cloud)` , `copy (copy new/changed files local vault -> cloud, no deletes)` |
-| `RCLONE_DESTINATIONS`          | empty              | rclone destination paths separated by `\|`.  |
+| `RCLONE_DESTINATIONS`          | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault` |
 | `RCLONE_CONFIG`                | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
 | `RCLONE_EXTRA_ARGS`            | empty              | Additional arguments passed to rclone                                |
 
@@ -257,15 +257,14 @@ RCLONE_DESTINATIONS=gdrive:CryptomatorVault|onedrive:CryptomatorVault
 
 The remote name is the section name in rclone.conf:
 ```text
-[gdrive]  # <-- This is the remote name
+[gdrive] # <-- This is the remote name
 type = drive
 scope = drive
-token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"2026-05-30T12:00:00.000000000+02:00"}
+token = ...
 
 [onedrive]
-type = drive
-scope = drive
-token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"2026-05-30T12:00:00.000000000+02:00"}
+type = onedrive
+token = ...
 ```
 
 If your vault should be placed inside a subdirectory of the remote, for example Google Drive:
@@ -275,7 +274,7 @@ Root/
         └── Backup Sync/
 ```
 
- set `RCLONE_DESTINATIONS` to:
+set `RCLONE_DESTINATIONS` to:
  ```env
  RCLONE_DESTINATIONS=gdrive:Vaults/Backup Sync
  ```
