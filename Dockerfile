@@ -30,12 +30,13 @@ RUN set -eux; \
         linux-arm64)  CRYPTOMATOR_PLATFORM="linux-aarch64" ;; \
         *) echo "Unsupported platform: ${TARGETOS}-${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    wget -qO /tmp/cryptomator.zip "https://github.com/cryptomator/cli/releases/download/${CRYPTOMATOR_CLI_VERSION}/cryptomator-cli-${CRYPTOMATOR_CLI_VERSION}-${CRYPTOMATOR_PLATFORM}.zip"; \
+    CRYPTOMATOR_DOWNLOAD="https://github.com/cryptomator/cli/releases/download/${CRYPTOMATOR_CLI_VERSION}/cryptomator-cli-${CRYPTOMATOR_CLI_VERSION}-${CRYPTOMATOR_PLATFORM}.zip"; \
+    wget -qO /tmp/cryptomator.zip "${CRYPTOMATOR_DOWNLOAD}"; \
     unzip -q /tmp/cryptomator.zip -d /opt; \
     chmod +x /opt/cryptomator-cli/bin/cryptomator-cli; \
     ln -s /opt/cryptomator-cli/bin/cryptomator-cli /usr/local/bin/cryptomator-cli; \
     INSTALLED_VERSION="$(cryptomator-cli --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"; \
-    test "$INSTALLED_VERSION" = "$CRYPTOMATOR_CLI_VERSION"; \
+    test "${INSTALLED_VERSION}" = "${CRYPTOMATOR_CLI_VERSION}"; \
     apt-get -y purge wget unzip; \
     apt-get -y autoremove; \
     apt-get -y clean; \
