@@ -14,16 +14,75 @@ log_err() {
   printf '\033[91m[%s] %s\033[0m\n' "$(date '+%H:%M:%S')" "$*"
 }
 
+exit_failed() {
+  log_err "$*"
+  exit 1
+}
+
 cleanup() {
+  rm -rf ./tests/rclone-remote ./tests/sync ./tests/tmp-vault
   docker image rm "$IMAGE_NAME" >/dev/null 2>&1 || true
+}
+
+create_temp_vault() {
+  rm -rf ./tests/tmp-vault
+  cp -r ./tests/test-vault ./tests/tmp-vault
+}
+
+create_sync_dir() {
+  rm -rf ./tests/sync
+  mkdir -p ./tests/sync
+}
+
+create_rclone_dir() {
+  rm -rf ./tests/rclone-remote
+  mkdir -p ./tests/rclone-remote ./tests/rclone-remote/temp-vault
 }
 
 trap cleanup EXIT
 
+docker_cleanup() {
+  create_sync_dir
+  create_temp_vault
+  create_rclone_dir
+}
+
+fix_test_file_permissions() {
+  docker run --rm \
+    -v "./tests:/tests" \
+    "$IMAGE_NAME" \
+    sh -c 'chmod -R a+rwX /tests/rclone-remote /tests/sync /tests/tmp-vault 2>/dev/null || true' \
+    >/dev/null 2>&1 || true
+}
+
+docker_run_without_cleanup() {
+  local exit_code=0
+  set +e
+  docker run --rm \
+    -v "./tests/sync:/sync:ro" \
+    -v "./tests/tmp-vault:/vault-encrypted" \
+    -v "./tests/rclone:/rclone" \
+    -v "./tests/rclone-remote:/rclone-remote" \
+    --cap-add SYS_ADMIN \
+    --device /dev/fuse:/dev/fuse \
+    --security-opt apparmor:unconfined \
+    -e SYNC_INTERVAL_MINUTES=0 \
+    "$@" \
+    "$IMAGE_NAME"
+  exit_code="$?"
+  set -e
+
+  fix_test_file_permissions
+  return "$exit_code"
+}
+
+docker_run() {
+  docker_cleanup
+  docker_run_without_cleanup
+}
+
 log "Preparing test directories and files..."
-rm -rf ./tests/sync
-mkdir -p ./tests/sync ./tests/vault ./tests/rclone
-touch ./tests/rclone/rclone.conf
+docker_cleanup
 
 log "TEST: run.sh syntax check"
 bash -n run.sh
@@ -31,11 +90,9 @@ bash -n run.sh
 log "TEST: healthcheck.sh syntax check"
 bash -n healthcheck.sh
 
-log "Building test image without cache..."
-docker buildx build \
-   --no-cache \
-  --load \
-  -t "$IMAGE_NAME" .
+log "Building test image..."
+docker buildx build --load -t "$IMAGE_NAME" .
+#docker buildx build --load --no-cache --pull -t "$IMAGE_NAME" .
 
 indent_gray_output() {
   sed 's/^/  \x1b[90m│ /; s/$/\x1b[0m/'
@@ -51,24 +108,10 @@ assert_exit_code() {
   set -e
 
   if [[ "$actual" -ne "$expected" ]]; then
-    log_err "FAILED: expected exit code $expected, got $actual"
-    return 1
+    exit_failed "FAILED: expected exit code $expected, got $actual"
   fi
 
   log "PASSED: exit code $actual"
-}
-
-docker_run() {
-  docker run --rm \
-    -v "./tests/sync:/sync:ro" \
-    -v "./tests/vault:/vault-encrypted" \
-    -v "./tests/rclone:/rclone" \
-    --cap-add SYS_ADMIN \
-    --device /dev/fuse:/dev/fuse \
-    --security-opt apparmor:unconfined \
-    -e SYNC_INTERVAL_MINUTES=0 \
-    "$@" \
-    "$IMAGE_NAME"
 }
 
 log "TEST: Missing vault password"
@@ -138,18 +181,30 @@ assert_exit_code 2 \
     -e RCLONE_CONFIG=/rclone/rclone.conf \
     -e RCLONE_START_DELAY_SECONDS=-1
 
-#log "TEST: One-shot sync copies file into vault"
-#rm -rf ./tests/sync && mkdir -p ./tests/sync
-#before="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
-#echo "hello from integration test" > ./tests/sync/test-file.txt
-#assert_exit_code 0 \
-#  docker_run \
-#    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-#    -e CRYPTOMATOR_MOUNT_MODE=auto
-#after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
-#if [[ "$before" == "$after" ]]; then
-#  log_err "FAILED: encrypted vault did not change after sync"
-#  exit 1
-#fi
+log "TEST: One-shot vault file copy"
+docker_cleanup
+before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from integration test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}"
+after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" == "$after" ]]; then
+  exit_failed "FAILED: Vault did not change after sync before=$before after=$after"
+fi
+
+log "TEST: One-shot vault rclone copy"
+docker_cleanup
+before="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from integration test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e RCLONE_ENABLED=true \
+    -e RCLONE_DESTINATIONS=remote:temp-vault
+after="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" == "$after" ]]; then
+  exit_failed "FAILED: Remote did not change after sync before=$before after=$after"
+fi
 
 log "All tests passed!"
