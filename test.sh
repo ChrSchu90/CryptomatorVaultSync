@@ -33,7 +33,7 @@ bash -n healthcheck.sh
 
 log "Building test image without cache..."
 docker buildx build \
-   --no-cache --pull \
+   --no-cache \
   --load \
   -t "$IMAGE_NAME" .
 
