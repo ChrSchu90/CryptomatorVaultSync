@@ -197,6 +197,7 @@ unlock_webdav() {
   local davfs_error_log="/tmp/davfs2-mount-error.log"
   local davfs_secrets_tmp="/tmp/davfs2-secrets"
   local webdav_url=""
+  # The WebDAV username and password are only used by `davfs2` to avoid interactive prompts when mounting the local WebDAV endpoint exposed by Cryptomator CLI.
   local davfs_user="${CRYPTOMATOR_WEBDAV_USERNAME:-cryptomator}"
   local davfs_pass="${CRYPTOMATOR_WEBDAV_PASSWORD:-cryptomator}"
 
