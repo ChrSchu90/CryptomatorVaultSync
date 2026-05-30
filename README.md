@@ -2,21 +2,13 @@
 
 [![Build](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml/badge.svg)](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml)
 
-One-way Docker-based file sync into an encrypted Cryptomator vault, with `FUSE` support and `WebDAV` fallback.
+`Cryptomator Vault Sync` syncs files from a plain source directory into a `Cryptomator` vault. The container unlocks the vault temporarily, copies files into the decrypted vault directory, and Cryptomator stores them encrypted in the vault directory.
 
-`CryptomatorVaultSync` syncs files from a plain sync directory into a Cryptomator vault. The container unlocks the vault temporarily, copies files into the decrypted vault view, and Cryptomator stores them encrypted in the vault directory.
-
-## ✨ What this project does
+Optionally, the encrypted vault can be synced to one or more remote destinations using `rclone`, for example Google Drive, OneDrive, SFTP, or any other rclone-supported backend.
 
 ```text
-/sync -> /vault-decrypted -> /vault-encrypted
+/sync -> /vault-decrypted -> /vault-encrypted -> optional rclone remote(s)
 ```
-
-- `/sync` is the plain source directory containing files that should be copied into the vault.
-- `/vault-decrypted` is an internal temporary mount point inside the container.
-- `/vault-encrypted` is the encrypted Cryptomator vault directory.
-
-The decrypted mount is intentionally internal. Even if `/vault-decrypted` is bind-mounted to the host, the host usually will not see the decrypted FUSE/WebDAV mount contents because the mount is created inside the container's mount namespace. Since the sync process runs inside the container, exposing `/vault-decrypted` to the host is not required.
 
 ## ⛔ What this project does not do
 
@@ -98,9 +90,11 @@ The directory must already contain an initialized Cryptomator vault. Create the 
 
 ### `/vault-decrypted`
 
-Internal temporary mount point used inside the container.
+The decrypted mount is intentionally internal. Even if `/vault-decrypted` is bind-mounted to the host, the host usually will not see the decrypted FUSE/WebDAV mount contents because the mount is created inside the container's mount namespace. Since the sync process runs inside the container, exposing `/vault-decrypted` to the host is not required.
 
-Do not bind-mount this path for normal one-way sync usage.
+### `/rclone`
+
+Directory for the optional `rclone.conf` in case `RCLONE_ENABLED=true`
 
 ## ⚙️ Environment variables
 
