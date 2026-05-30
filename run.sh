@@ -25,15 +25,15 @@ CRYPTOMATOR_PID=""
 WEBDAV_MOUNTED="false"
 
 log_info() {
-  printf '[%s] \033[34mINF\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+  printf '[%s] \033[94mINF\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
 
 log_warn() {
-  printf '[%s] \033[38;5;208mWRN\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+  printf '[%s] \033[93mWRN\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
 
 log_error() {
-  printf '[%s] \033[31mERR\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+  printf '[%s] \033[91mERR\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
 
 exit_failed() {
@@ -198,8 +198,8 @@ unlock_webdav() {
   local davfs_secrets_tmp="/tmp/davfs2-secrets"
   local webdav_url=""
   # The WebDAV username and password are only used by `davfs2` to avoid interactive prompts when mounting the local WebDAV endpoint exposed by Cryptomator CLI.
-  local davfs_user="${CRYPTOMATOR_WEBDAV_USERNAME:-cryptomator}"
-  local davfs_pass="${CRYPTOMATOR_WEBDAV_PASSWORD:-cryptomator}"
+  local davfs_user="cryptomator"
+  local davfs_pass="cryptomator"
 
   : > "$cryptomator_log"
   : > "$davfs_error_log"
