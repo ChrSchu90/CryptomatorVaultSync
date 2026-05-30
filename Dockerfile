@@ -3,6 +3,7 @@ FROM debian:trixie-slim@sha256:b6e2a152f22a40ff69d92cb397223c906017e1391a73c952b
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
+ARG RCLONE_RELEASE=1.74.2
 ARG CRYPTOMATOR_CLI_VERSION=0.6.2
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -16,7 +17,6 @@ RUN set -eux; \
         ca-certificates \
         fuse3 \
         davfs2 \
-        rclone \
         rsync; \
     apt-get autoremove -y; \
     apt-get clean; \
@@ -42,6 +42,20 @@ RUN set -eux; \
     apt-get -y autoremove; \
     apt-get -y clean; \
     rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
+
+# Install rclone
+RUN set -eux; \
+    apt-get update; \
+    apt-get -y install --no-install-recommends wget; \
+    RCLONE_DOWNLOAD="https://github.com/rclone/rclone/releases/download/v${RCLONE_RELEASE}/rclone-v${RCLONE_RELEASE}-${TARGETOS}-${TARGETARCH}.deb"; \
+    wget -qO /tmp/rclone.deb "${RCLONE_DOWNLOAD}"; \
+    apt-get -y install --no-install-recommends /tmp/rclone.deb; \
+    INSTALLED_VERSION="$(rclone version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)";
+    #test "$INSTALLED_VERSION" = "$RCLONE_RELEASE"; \
+    #apt-get -y purge wget; \
+    #apt-get -y autoremove; \
+    #apt-get -y clean; \
+    #rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
 
 # Add project binaries
 COPY --chmod=755 run.sh /run.sh
