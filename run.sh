@@ -22,7 +22,7 @@ SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
 
 RCLONE_ENABLED="${RCLONE_ENABLED:-false}"
 RCLONE_MODE="${RCLONE_MODE:-sync}"
-RCLONE_DESTINATION="${RCLONE_DESTINATION:-remote:CryptomatorVault}"
+RCLONE_DESTINATIONS="${RCLONE_DESTINATIONS:-}"
 RCLONE_CONFIG="${RCLONE_CONFIG:-/rclone/rclone.conf}"
 RCLONE_EXTRA_ARGS="${RCLONE_EXTRA_ARGS:-}"
 
@@ -337,8 +337,8 @@ validate_config() {
   fi
   
   if [[ "$RCLONE_ENABLED" == "true" ]]; then
-    if [[ -z "$RCLONE_DESTINATION" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_DESTINATION is required when RCLONE_ENABLED=true"
+    if [[ -z "$RCLONE_DESTINATIONS" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_DESTINATIONS is required when RCLONE_ENABLED=true"
     fi
   
     if [[ ! -f "$RCLONE_CONFIG" ]]; then
@@ -384,21 +384,41 @@ run_rclone() {
     return 0
   fi
 
-  log_info "Running rclone $RCLONE_MODE $VAULT_ENCRYPTED_DIR -> $RCLONE_DESTINATION"
+  local destination=""
+  local rclone_exit_code=0
+  local destination_count=0
 
-  set +e
-  # shellcheck disable=SC2086
-  rclone "$RCLONE_MODE" "$VAULT_ENCRYPTED_DIR" "$RCLONE_DESTINATION" \
-    --config "$RCLONE_CONFIG" \
-    $RCLONE_EXTRA_ARGS
-  local rclone_exit_code="$?"
-  set -e
+  IFS='|' read -r -a destinations <<< "$RCLONE_DESTINATIONS"
 
-  if [[ "$rclone_exit_code" -ne 0 ]]; then
-    exit_failed "$EXIT_GENERAL_ERROR" "rclone failed with exit code $rclone_exit_code"
+  for destination in "${destinations[@]}"; do
+    if [[ -z "$destination" ]]; then
+      continue
+    fi
+
+    destination_count="$((destination_count + 1))"
+
+    log_info "Running rclone $RCLONE_MODE $VAULT_ENCRYPTED_DIR -> $destination"
+
+    set +e
+    # shellcheck disable=SC2086
+    rclone "$RCLONE_MODE" "$VAULT_ENCRYPTED_DIR" "$destination" \
+      --config "$RCLONE_CONFIG" \
+      $RCLONE_EXTRA_ARGS
+    rclone_exit_code="$?"
+    set -e
+
+    if [[ "$rclone_exit_code" -ne 0 ]]; then
+      exit_failed "$EXIT_GENERAL_ERROR" "rclone failed for destination '$destination' with exit code $rclone_exit_code"
+    fi
+
+    log_info "rclone finished for destination: $destination"
+  done
+
+  if [[ "$destination_count" -eq 0 ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_DESTINATIONS does not contain any valid destination"
   fi
 
-  log_info "rclone finished."
+  log_info "rclone finished for all destinations."
 }
 
 sync_cycle() {

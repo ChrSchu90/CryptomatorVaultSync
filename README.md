@@ -118,7 +118,7 @@ Do not bind-mount this path for normal one-way sync usage.
 | `HEALTHCHECK_WRITE_TEST`       | `false`            | If `true`, enables an extended write test inside the healthcheck     |
 | `RCLONE_ENABLED`               | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
 | `RCLONE_MODE`                  | `sync`             | rclone operation mode. Supported values: `sync (one-way local vault -> cloud)` , `copy (copy new/changed files local vault -> cloud, no deletes)` |
-| `RCLONE_DESTINATION`           | `remote:CryptomatorVault` | rclone destination path. `remote` is a placeholder and must match the `[xxx]` value in `rclone.conf` |
+| `RCLONE_DESTINATIONS`          | empty              | rclone destination paths separated by `\|`.  |
 | `RCLONE_CONFIG`                | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
 | `RCLONE_EXTRA_ARGS`            | empty              | Additional arguments passed to rclone                                |
 
@@ -246,14 +246,23 @@ docker run --rm -it \
   rclone/rclone config --config /rclone/rclone.conf
 ```
 
-After the config has been created, set RCLONE_DESTINATION to the remote and path you want to sync to, for example:
+After the config has been created, set `RCLONE_DESTINATIONS` to one or more remote paths you want to sync to, for example:
 ```env
-RCLONE_DESTINATION=gdrive:CryptomatorVault
+RCLONE_DESTINATIONS=gdrive:CryptomatorVault
+```
+or with multiple upstreams
+```env
+RCLONE_DESTINATIONS=gdrive:CryptomatorVault|onedrive:CryptomatorVault
 ```
 
 The remote name is the section name in rclone.conf:
 ```text
 [gdrive]  # <-- This is the remote name
+type = drive
+scope = drive
+token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"2026-05-30T12:00:00.000000000+02:00"}
+
+[onedrive]
 type = drive
 scope = drive
 token = {"access_token":"...","token_type":"Bearer","refresh_token":"...","expiry":"2026-05-30T12:00:00.000000000+02:00"}
@@ -266,9 +275,9 @@ Root/
         └── Backup Sync/
 ```
 
- set `RCLONE_DESTINATION` to:
+ set `RCLONE_DESTINATIONS` to:
  ```env
- RCLONE_DESTINATION=gdrive:Vaults/Backup Sync
+ RCLONE_DESTINATIONS=gdrive:Vaults/Backup Sync
  ```
 
 ## 🚦 Exit codes
