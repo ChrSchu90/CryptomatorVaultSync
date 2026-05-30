@@ -16,6 +16,7 @@ RUN set -eux; \
         ca-certificates \
         fuse3 \
         davfs2 \
+        rclone \
         rsync; \
     apt-get autoremove -y; \
     apt-get clean; \
@@ -53,7 +54,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # /sync             Source root dir with files that should be synced
 # /vault-encrypted  Encrypted Cryptomator vault mount
 # /vault-decrypted  Internal temporary mount point. The host usually cannot see its contents because the mount is created inside the container namespace.
-VOLUME ["/sync", "/vault-encrypted"]
+# /rclone           Config file directory for optional rclone to e.g. Google Drive or OneDrive
+VOLUME ["/sync", "/vault-encrypted", "/rclone"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/run.sh"]
