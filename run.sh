@@ -93,6 +93,22 @@ trap cleanup EXIT
 trap 'cleanup; exit "$EXIT_OK"' INT
 trap 'cleanup; exit "$EXIT_OK"' TERM
 
+require_cryptomator_vault() {
+  local dir="$1"
+
+  if [[ ! -f "$dir/vault.cryptomator" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "missing vault.cryptomator in encrypted vault dir: $dir"
+  fi
+
+  if [[ ! -f "$dir/masterkey.cryptomator" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "missing masterkey.cryptomator in encrypted vault dir: $dir"
+  fi
+
+  if [[ ! -d "$dir/d" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "missing encrypted data directory 'd' in encrypted vault dir: $dir"
+  fi
+}
+
 require_dir() {
   local dir="$1"
   local name="$2"
@@ -284,6 +300,7 @@ unlock_webdav() {
 validate_config() {
   require_dir "$SYNC_DIR" "sync dir"
   require_dir "$VAULT_ENCRYPTED_DIR" "encrypted vault dir"
+  require_cryptomator_vault "$VAULT_ENCRYPTED_DIR"
   require_empty_mountpoint
 
   if [[ -z "${CRYPTOMATOR_VAULT_PASSWORD:-}" ]]; then

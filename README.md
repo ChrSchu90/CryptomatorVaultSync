@@ -88,9 +88,9 @@ Example:
 
 ### `/vault-encrypted`
 
-Encrypted Cryptomator vault directory.
+Encrypted Cryptomator vault directory. This is the directory you also open with the official Cryptomator app.
 
-This is the directory you also open with the official Cryptomator app.
+The directory must already contain an initialized Cryptomator vault. Create the vault beforehand using the [official Cryptomator app](https://cryptomator.org/downloads).
 
 ```bash
 -v /path/to/vault:/vault-encrypted
@@ -192,7 +192,7 @@ The container will keep the vault mounted and run `rsync` every 5 minutes.
 
 Use this only if you are comfortable with the vault staying unlocked while the container is running.
 
-## Mount modes
+## 🔗 Mount modes
 
 ### `FUSE`
 
