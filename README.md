@@ -117,7 +117,7 @@ Do not bind-mount this path for normal one-way sync usage.
 | `SYNC_INTERVAL_MINUTES`        | `0`                | `0` means one-shot mode; any positive value enables continuous sync  |
 | `HEALTHCHECK_WRITE_TEST`       | `false`            | If `true`, enables an extended write test inside the healthcheck     |
 | `RCLONE_ENABLED`               | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
-| `RCLONE_MODE`                  | `sync`             | rclone operation mode. Supported values: `sync (one-way local vault -> cloud)` , `copy (copy new/changed files local vault -> cloud, no deletes)` |
+| `RCLONE_MODE`                  | `sync`             | rclone operation mode. Supported values: `sync (one-way vault -> cloud)` , `copy (one-way vault -> cloud, no deletes)` |
 | `RCLONE_DESTINATIONS`          | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault` |
 | `RCLONE_CONFIG`                | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
 | `RCLONE_EXTRA_ARGS`            | empty              | Additional arguments passed to rclone                                |
@@ -257,6 +257,8 @@ or with multiple upstreams
 RCLONE_DESTINATIONS=gdrive:CryptomatorVault|onedrive:CryptomatorVault
 ```
 
+Multiple destinations are separated by `|`. Do not add spaces around `|`. Avoid using `|` in remote folder names.
+
 The remote name is the section name in rclone.conf:
 ```text
 [gdrive] # <-- This is the remote name
@@ -273,13 +275,13 @@ If your vault should be placed inside a subdirectory of the remote, for example 
 ```text
 Root/
 └── Vaults/
-        └── Backup Sync/
+        └── Backup Vault/
 ```
 
 set `RCLONE_DESTINATIONS` to:
- ```env
- RCLONE_DESTINATIONS=gdrive:Vaults/Backup Sync
- ```
+```env
+RCLONE_DESTINATIONS=gdrive:Vaults/Backup Vault
+```
 
 ## 🚦 Exit codes
 

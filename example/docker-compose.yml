@@ -21,7 +21,7 @@ services:
       HEALTHCHECK_WRITE_TEST: false                       # Optional [default=false]
       RCLONE_ENABLED: false                               # Optional [default=false]
       RCLONE_MODE: sync                                   # Optional [default=sync] sync (one-way local vault -> cloud), copy (copy new/changed files local vault -> cloud, no deletes)
-      RCLONE_DESTINATIONS: remote:CryptomatorVault        # Required must match the `[xxx]` value inside `rclone.conf`
+      RCLONE_DESTINATIONS: remote:CryptomatorVault        # Required if RCLONE_ENABLED=true; remote must match a section in rclone.conf
       RCLONE_CONFIG: /rclone/rclone.conf                  # Optional [default=/rclone/rclone.conf]
       RCLONE_EXTRA_ARGS:                                  # Optional [default=]
       RCLONE_START_DELAY_SECONDS: 0                       # Optional [default=0] defines a delay between RSYNC und RCLONE
