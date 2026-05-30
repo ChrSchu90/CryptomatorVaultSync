@@ -121,6 +121,9 @@ Do not bind-mount this path for normal one-way sync usage.
 | `RCLONE_DESTINATIONS`          | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault` |
 | `RCLONE_CONFIG`                | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
 | `RCLONE_EXTRA_ARGS`            | empty              | Additional arguments passed to rclone                                |
+| `RCLONE_EXTRA_ARGS`            | empty              | Additional arguments passed to rclone                                |
+| `RCLONE_START_DELAY_SECONDS`   | `0`                | Optional delay between rsync (`sync` -> `vault`) and rclone (`vault` -> `remote`) |
+
 
 ## 🏷️ Image Labels
 

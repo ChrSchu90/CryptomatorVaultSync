@@ -25,6 +25,7 @@ RCLONE_MODE="${RCLONE_MODE:-sync}"
 RCLONE_DESTINATIONS="${RCLONE_DESTINATIONS:-}"
 RCLONE_CONFIG="${RCLONE_CONFIG:-/rclone/rclone.conf}"
 RCLONE_EXTRA_ARGS="${RCLONE_EXTRA_ARGS:-}"
+RCLONE_START_DELAY_SECONDS="${RCLONE_START_DELAY_SECONDS:-0}"
 
 CRYPTOMATOR_PID=""
 WEBDAV_MOUNTED="false"
@@ -351,6 +352,10 @@ validate_config() {
     if [[ ! -f "$RCLONE_CONFIG" ]]; then
       exit_failed "$EXIT_CONFIG_ERROR" "rclone config does not exist: $RCLONE_CONFIG"
     fi
+
+    if ! [[ "$RCLONE_START_DELAY_SECONDS" =~ ^[0-9]+$ ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_START_DELAY_SECONDS must be a non-negative integer"
+    fi
   
     case "$RCLONE_MODE" in
       sync|copy)
@@ -384,6 +389,21 @@ mount_vault() {
       fi
       ;;
   esac
+}
+
+prepare_vault_for_rclone() {
+  if [[ "$RCLONE_ENABLED" != "true" ]]; then
+    return 0
+  fi
+
+  log_info "Preparing encrypted vault for rclone..."
+
+  sync -f "$VAULT_ENCRYPTED_DIR" 2>/dev/null || sync
+
+  if [[ "$RCLONE_START_DELAY_SECONDS" != "0" ]]; then
+    log_info "Waiting ${RCLONE_START_DELAY_SECONDS}s before running rclone..."
+    sleep "$RCLONE_START_DELAY_SECONDS"
+  fi
 }
 
 run_rclone() {
@@ -434,6 +454,7 @@ sync_cycle() {
   mount_vault
   sync_once
   cleanup_resources
+  prepare_vault_for_rclone
   run_rclone
 }
 
