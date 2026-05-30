@@ -7,8 +7,8 @@ VAULT_DECRYPTED_DIR="${VAULT_DECRYPTED_DIR:-/vault-decrypted}"
 
 SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
 
-RCLONE_ENABLED="${RCLONE_ENABLED:-false}"
-RCLONE_CONFIG="${RCLONE_CONFIG:-/rclone/rclone.conf}"
+UPSTREAM_ENABLED="${UPSTREAM_ENABLED:-false}"
+UPSTREAM_CONFIG="${UPSTREAM_CONFIG:-/rclone/rclone.conf}"
 
 case "$SYNC_INTERVAL_MINUTES" in
   ''|*[!0-9]*)
@@ -61,13 +61,13 @@ if mountpoint -q "$VAULT_DECRYPTED_DIR"; then
   fi
 fi
 
-if [[ "$RCLONE_ENABLED" != "true" && "$RCLONE_ENABLED" != "false" ]]; then
-  echo "RCLONE_ENABLED must be true or false"
+if [[ "$UPSTREAM_ENABLED" != "true" && "$UPSTREAM_ENABLED" != "false" ]]; then
+  echo "UPSTREAM_ENABLED must be true or false"
   exit 1
 fi
 
-if [[ "$RCLONE_ENABLED" == "true" && ! -f "$RCLONE_CONFIG" ]]; then
-  echo "rclone config does not exist: $RCLONE_CONFIG"
+if [[ "$UPSTREAM_ENABLED" == "true" && ! -f "$UPSTREAM_CONFIG" ]]; then
+  echo "rclone config does not exist: $UPSTREAM_CONFIG"
   exit 1
 fi
 

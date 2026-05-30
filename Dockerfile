@@ -4,7 +4,7 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG RCLONE_RELEASE=1.74.2
-ARG CRYPTOMATOR_CLI_VERSION=0.6.2
+ARG CRYPTOMATOR_CLI_RELEASE=0.6.2
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -31,13 +31,13 @@ RUN set -eux; \
         linux-arm64)  CRYPTOMATOR_PLATFORM="linux-aarch64" ;; \
         *) echo "Unsupported platform: ${TARGETOS}-${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    CRYPTOMATOR_DOWNLOAD="https://github.com/cryptomator/cli/releases/download/${CRYPTOMATOR_CLI_VERSION}/cryptomator-cli-${CRYPTOMATOR_CLI_VERSION}-${CRYPTOMATOR_PLATFORM}.zip"; \
-    wget -qO /tmp/cryptomator.zip "${CRYPTOMATOR_DOWNLOAD}"; \
+    DOWNLOAD="https://github.com/cryptomator/cli/releases/download/${CRYPTOMATOR_CLI_RELEASE}/cryptomator-cli-${CRYPTOMATOR_CLI_RELEASE}-${CRYPTOMATOR_PLATFORM}.zip"; \
+    wget -qO /tmp/cryptomator.zip "${DOWNLOAD}"; \
     unzip -q /tmp/cryptomator.zip -d /opt; \
     chmod +x /opt/cryptomator-cli/bin/cryptomator-cli; \
     ln -s /opt/cryptomator-cli/bin/cryptomator-cli /usr/local/bin/cryptomator-cli; \
     INSTALLED_VERSION="$(cryptomator-cli --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"; \
-    test "${INSTALLED_VERSION}" = "${CRYPTOMATOR_CLI_VERSION}"; \
+    test "${INSTALLED_VERSION}" = "${CRYPTOMATOR_CLI_RELEASE}"; \
     apt-get -y purge wget unzip; \
     apt-get -y autoremove; \
     apt-get -y clean; \
@@ -47,15 +47,15 @@ RUN set -eux; \
 RUN set -eux; \
     apt-get update; \
     apt-get -y install --no-install-recommends wget; \
-    RCLONE_DOWNLOAD="https://github.com/rclone/rclone/releases/download/v${RCLONE_RELEASE}/rclone-v${RCLONE_RELEASE}-${TARGETOS}-${TARGETARCH}.deb"; \
-    wget -qO /tmp/rclone.deb "${RCLONE_DOWNLOAD}"; \
+    DOWNLOAD="https://github.com/rclone/rclone/releases/download/v${RCLONE_RELEASE}/rclone-v${RCLONE_RELEASE}-${TARGETOS}-${TARGETARCH}.deb"; \
+    wget -qO /tmp/rclone.deb "${DOWNLOAD}"; \
     apt-get -y install --no-install-recommends /tmp/rclone.deb; \
-    INSTALLED_VERSION="$(rclone version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)";
-    #test "$INSTALLED_VERSION" = "$RCLONE_RELEASE"; \
-    #apt-get -y purge wget; \
-    #apt-get -y autoremove; \
-    #apt-get -y clean; \
-    #rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
+    INSTALLED_VERSION="$(rclone version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"; \
+    test "$INSTALLED_VERSION" = "$RCLONE_RELEASE"; \
+    apt-get -y purge wget; \
+    apt-get -y autoremove; \
+    apt-get -y clean; \
+    rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
 
 # Add project binaries
 COPY --chmod=755 run.sh /run.sh

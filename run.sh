@@ -20,12 +20,12 @@ RSYNC_ARGS="${RSYNC_ARGS:--rtv --no-owner --no-group --no-perms}"
 RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
 SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
 
-RCLONE_ENABLED="${RCLONE_ENABLED:-false}"
-RCLONE_MODE="${RCLONE_MODE:-sync}"
-RCLONE_DESTINATIONS="${RCLONE_DESTINATIONS:-}"
-RCLONE_CONFIG="${RCLONE_CONFIG:-/rclone/rclone.conf}"
-RCLONE_EXTRA_ARGS="${RCLONE_EXTRA_ARGS:-}"
-RCLONE_START_DELAY_SECONDS="${RCLONE_START_DELAY_SECONDS:-0}"
+UPSTREAM_ENABLED="${UPSTREAM_ENABLED:-false}"
+UPSTREAM_MODE="${UPSTREAM_MODE:-sync}"
+UPSTREAM_DESTINATIONS="${UPSTREAM_DESTINATIONS:-}"
+UPSTREAM_CONFIG="${UPSTREAM_CONFIG:-/rclone/rclone.conf}"
+UPSTREAM_EXTRA_ARGS="${UPSTREAM_EXTRA_ARGS:-}"
+UPSTREAM_START_DELAY_SECONDS="${UPSTREAM_START_DELAY_SECONDS:-0}"
 
 CRYPTOMATOR_PID=""
 WEBDAV_MOUNTED="false"
@@ -340,28 +340,28 @@ validate_config() {
     exit_failed "$EXIT_CONFIG_ERROR" "MOUNT_TIMEOUT_SECONDS must be a positive integer"
   fi
 
-  if [[ "$RCLONE_ENABLED" != "true" && "$RCLONE_ENABLED" != "false" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_ENABLED must be true or false"
+  if [[ "$UPSTREAM_ENABLED" != "true" && "$UPSTREAM_ENABLED" != "false" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_ENABLED must be true or false"
   fi
   
-  if [[ "$RCLONE_ENABLED" == "true" ]]; then
-    if [[ -z "$RCLONE_DESTINATIONS" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_DESTINATIONS is required when RCLONE_ENABLED=true"
+  if [[ "$UPSTREAM_ENABLED" == "true" ]]; then
+    if [[ -z "$UPSTREAM_DESTINATIONS" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_DESTINATIONS is required when UPSTREAM_ENABLED=true"
     fi
   
-    if [[ ! -f "$RCLONE_CONFIG" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "rclone config does not exist: $RCLONE_CONFIG"
+    if [[ ! -f "$UPSTREAM_CONFIG" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "rclone config does not exist: $UPSTREAM_CONFIG"
     fi
 
-    if ! [[ "$RCLONE_START_DELAY_SECONDS" =~ ^[0-9]+$ ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_START_DELAY_SECONDS must be a non-negative integer"
+    if ! [[ "$UPSTREAM_START_DELAY_SECONDS" =~ ^[0-9]+$ ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_START_DELAY_SECONDS must be a non-negative integer"
     fi
   
-    case "$RCLONE_MODE" in
+    case "$UPSTREAM_MODE" in
       sync|copy)
         ;;
       *)
-        exit_failed "$EXIT_CONFIG_ERROR" "invalid RCLONE_MODE: $RCLONE_MODE. Allowed values: sync, copy"
+        exit_failed "$EXIT_CONFIG_ERROR" "invalid UPSTREAM_MODE: $UPSTREAM_MODE. Allowed values: sync, copy"
         ;;
     esac
   fi
@@ -392,7 +392,7 @@ mount_vault() {
 }
 
 prepare_vault_for_rclone() {
-  if [[ "$RCLONE_ENABLED" != "true" ]]; then
+  if [[ "$UPSTREAM_ENABLED" != "true" ]]; then
     return 0
   fi
 
@@ -400,14 +400,14 @@ prepare_vault_for_rclone() {
 
   sync -f "$VAULT_ENCRYPTED_DIR" 2>/dev/null || sync
 
-  if [[ "$RCLONE_START_DELAY_SECONDS" != "0" ]]; then
-    log_info "Waiting ${RCLONE_START_DELAY_SECONDS}s before running rclone..."
-    sleep "$RCLONE_START_DELAY_SECONDS"
+  if [[ "$UPSTREAM_START_DELAY_SECONDS" != "0" ]]; then
+    log_info "Waiting ${UPSTREAM_START_DELAY_SECONDS}s before running rclone..."
+    sleep "$UPSTREAM_START_DELAY_SECONDS"
   fi
 }
 
 run_rclone() {
-  if [[ "$RCLONE_ENABLED" != "true" ]]; then
+  if [[ "$UPSTREAM_ENABLED" != "true" ]]; then
     return 0
   fi
 
@@ -415,7 +415,7 @@ run_rclone() {
   local rclone_exit_code=0
   local destination_count=0
 
-  IFS='|' read -r -a destinations <<< "$RCLONE_DESTINATIONS"
+  IFS='|' read -r -a destinations <<< "$UPSTREAM_DESTINATIONS"
 
   for destination in "${destinations[@]}"; do
     destination="$(trim "$destination")"
@@ -426,13 +426,13 @@ run_rclone() {
 
     destination_count="$((destination_count + 1))"
 
-    log_info "Running rclone $RCLONE_MODE $VAULT_ENCRYPTED_DIR -> $destination"
+    log_info "Running rclone $UPSTREAM_MODE $VAULT_ENCRYPTED_DIR -> $destination"
 
     set +e
     # shellcheck disable=SC2086
-    rclone "$RCLONE_MODE" "$VAULT_ENCRYPTED_DIR" "$destination" \
-      --config "$RCLONE_CONFIG" \
-      $RCLONE_EXTRA_ARGS
+    rclone "$UPSTREAM_MODE" "$VAULT_ENCRYPTED_DIR" "$destination" \
+      --config "$UPSTREAM_CONFIG" \
+      $UPSTREAM_EXTRA_ARGS
     rclone_exit_code="$?"
     set -e
 
@@ -444,7 +444,7 @@ run_rclone() {
   done
 
   if [[ "$destination_count" -eq 0 ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_DESTINATIONS does not contain any valid destination"
+    exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_DESTINATIONS does not contain any valid destination"
   fi
 
   log_info "rclone finished for all destinations."

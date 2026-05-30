@@ -141,44 +141,44 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e MOUNT_TIMEOUT_SECONDS=0
 
-log "TEST: Invalid RCLONE_ENABLED"
+log "TEST: Invalid UPSTREAM_ENABLED"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e RCLONE_ENABLED=invalid
+    -e UPSTREAM_ENABLED=invalid
 
-log "TEST: Invalid RCLONE_DESTINATIONS"
+log "TEST: Invalid UPSTREAM_DESTINATIONS"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e RCLONE_ENABLED=true \
-    -e RCLONE_DESTINATIONS=
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_DESTINATIONS=
 
-log "TEST: Invalid RCLONE_CONFIG"
+log "TEST: Invalid UPSTREAM_CONFIG"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e RCLONE_ENABLED=true \
-    -e RCLONE_DESTINATIONS=remote:Vault \
-    -e RCLONE_CONFIG=/rclone/missing.conf
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_DESTINATIONS=remote:Vault \
+    -e UPSTREAM_CONFIG=/rclone/missing.conf
 
-log "TEST: Invalid RCLONE_MODE"
+log "TEST: Invalid UPSTREAM_MODE"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e RCLONE_ENABLED=true \
-    -e RCLONE_MODE=invalid \
-    -e RCLONE_DESTINATIONS=remote:Vault \
-    -e RCLONE_CONFIG=/rclone/rclone.conf
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_MODE=invalid \
+    -e UPSTREAM_DESTINATIONS=remote:Vault \
+    -e UPSTREAM_CONFIG=/rclone/rclone.conf
 
-log "TEST: Invalid RCLONE_START_DELAY_SECONDS"
+log "TEST: Invalid UPSTREAM_START_DELAY_SECONDS"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e RCLONE_ENABLED=true \
-    -e RCLONE_DESTINATIONS=remote:Vault \
-    -e RCLONE_CONFIG=/rclone/rclone.conf \
-    -e RCLONE_START_DELAY_SECONDS=-1
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_DESTINATIONS=remote:Vault \
+    -e UPSTREAM_CONFIG=/rclone/rclone.conf \
+    -e UPSTREAM_START_DELAY_SECONDS=-1
 
 log "TEST: One-shot vault file copy"
 docker_cleanup
@@ -199,8 +199,8 @@ echo "hello from integration test" > ./tests/sync/test-file.txt
 assert_exit_code 0 \
   docker_run_without_cleanup \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e RCLONE_ENABLED=true \
-    -e RCLONE_DESTINATIONS=remote:temp-vault
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_DESTINATIONS=remote:temp-vault
 after="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before" == "$after" ]]; then
   exit_failed "FAILED: Remote did not change after sync before=$before after=$after"

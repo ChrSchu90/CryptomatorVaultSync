@@ -95,7 +95,7 @@ The decrypted mount is intentionally internal. Even if `/vault-decrypted` is bin
 
 ### `/rclone`
 
-Directory for the optional `rclone.conf` in case `RCLONE_ENABLED=true`
+Directory for the optional `rclone.conf` in case `UPSTREAM_ENABLED=true`
 
 ## ⚙️ Environment variables
 
@@ -110,12 +110,12 @@ Directory for the optional `rclone.conf` in case `RCLONE_ENABLED=true`
 | `RSYNC_EXTRA_ARGS`             | empty              | Additional rsync arguments                                           |
 | `MOUNT_TIMEOUT_SECONDS`        | `60`               | Timeout for mount operations                                         |
 | `SYNC_INTERVAL_MINUTES`        | `0`                | `0` means one-shot mode; any positive value enables continuous sync  |
-| `RCLONE_ENABLED`               | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
-| `RCLONE_MODE`                  | `sync`             | rclone operation mode. Supported values: `sync (one-way vault -> cloud)` , `copy (one-way vault -> cloud, no deletes)` |
-| `RCLONE_DESTINATIONS`          | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault` |
-| `RCLONE_CONFIG`                | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
-| `RCLONE_EXTRA_ARGS`            | empty              | Additional arguments passed to rclone                                |
-| `RCLONE_START_DELAY_SECONDS`   | `0`                | Optional delay between rsync (`sync` -> `vault`) and rclone (`vault` -> `remote`) |
+| `UPSTREAM_ENABLED`               | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
+| `UPSTREAM_MODE`                  | `sync`             | rclone operation mode. Supported values: `sync (one-way vault -> cloud)` , `copy (one-way vault -> cloud, no deletes)` |
+| `UPSTREAM_DESTINATIONS`          | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault` |
+| `UPSTREAM_CONFIG`                | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
+| `UPSTREAM_EXTRA_ARGS`            | empty              | Additional arguments passed to rclone                                |
+| `UPSTREAM_START_DELAY_SECONDS`   | `0`                | Optional delay between rsync (`sync` -> `vault`) and rclone (`vault` -> `remote`) |
 
 
 ## 🏷️ Image Labels
@@ -256,13 +256,13 @@ docker run --rm -it \
   rclone/rclone config --config /rclone/rclone.conf
 ```
 
-After the config has been created, set `RCLONE_DESTINATIONS` to one or more remote paths you want to sync to, for example:
+After the config has been created, set `UPSTREAM_DESTINATIONS` to one or more remote paths you want to sync to, for example:
 ```env
-RCLONE_DESTINATIONS=gdrive:CryptomatorVault
+UPSTREAM_DESTINATIONS=gdrive:CryptomatorVault
 ```
 or with multiple upstreams
 ```env
-RCLONE_DESTINATIONS=gdrive:CryptomatorVault|onedrive:CryptomatorVault
+UPSTREAM_DESTINATIONS=gdrive:CryptomatorVault|onedrive:CryptomatorVault
 ```
 
 Multiple destinations are separated by `|`. Do not add spaces around `|`. Avoid using `|` in remote folder names.
@@ -286,9 +286,9 @@ Root/
         └── Backup Vault/
 ```
 
-set `RCLONE_DESTINATIONS` to:
+set `UPSTREAM_DESTINATIONS` to:
 ```env
-RCLONE_DESTINATIONS=gdrive:Vaults/Backup Vault
+UPSTREAM_DESTINATIONS=gdrive:Vaults/Backup Vault
 ```
 
 ## 💥 Error handling and restarts
