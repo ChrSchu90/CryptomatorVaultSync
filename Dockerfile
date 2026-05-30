@@ -52,7 +52,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 
 # /sync             Source root dir with files that should be synced
 # /vault-encrypted  Encrypted Cryptomator vault mount
-# The vault-decrypted mount is internally, since the host can not see the content anyways
+# /vault-decrypted  Internal temporary mount point. The host usually cannot see its contents because the mount is created inside the container namespace.
 VOLUME ["/sync", "/vault-encrypted"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

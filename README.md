@@ -77,7 +77,7 @@ Source directory containing files that should be copied into the vault.
 -v /path/to/sync:/sync:ro
 ```
 
-You can also mount multiple source directories as subdirectories below /sync. All files below /sync will be synced into the vault while preserving the subdirectory structure.
+You can also mount multiple source directories as subdirectories below `/sync`. All files below `/sync` will be one-way-synced into the vault while preserving the subdirectory structure.
 
 Example:
 ```bash

@@ -8,7 +8,7 @@ EXIT_CONFIG_ERROR=2
 SYNC_DIR="${SYNC_DIR:-/sync}"
 
 VAULT_ENCRYPTED_DIR="${VAULT_ENCRYPTED_DIR:-/vault-encrypted}"
-VAULT_DECRYPTED_DIR="/vault-decrypted" # The vault-decrypted mount is internally, since the host can not see the content anyways
+VAULT_DECRYPTED_DIR="/vault-decrypted" # Internal temporary mount point. The host usually cannot see its contents because the mount is created inside the container namespace.
 VAULT_DECRYPTED_BASE_DEV=""
 VAULT_PASSWORD=""
 
