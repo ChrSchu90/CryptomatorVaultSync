@@ -291,7 +291,17 @@ set `RCLONE_DESTINATIONS` to:
 RCLONE_DESTINATIONS=gdrive:Vaults/Backup Vault
 ```
 
-## 🚦 Exit codes
+## 💥 Error handling and restarts
+
+The container exits on configuration errors, mount errors, rsync errors, and rclone errors.
+
+This is intentional: failed sync cycles should be visible to the container runtime, schedulers, or monitoring tools.
+
+If you want the container to recover automatically from temporary runtime errors, such as network issues during rclone sync, use a Docker restart policy:
+- Use `restart: unless-stopped` for continuous mode.
+- Use `restart: "no"` for one-shot usage with an external scheduler, keep restart: "no" so the scheduler can detect failed runs by the container exit code.
+
+## 🏁 Exit codes
 
 | Exit code | Meaning |
 |----:|----------------------------------------------------|
