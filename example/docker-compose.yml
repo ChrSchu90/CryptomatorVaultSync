@@ -18,7 +18,6 @@ services:
       RSYNC_DELETE: false                                 # Optional [default=false] Do not enable unless /sync is intended to be the authoritative source!
       RSYNC_ARGS: '-rtv --no-owner --no-group --no-perms' # Optional [default=-rtv --no-owner --no-group --no-perms]
       RSYNC_EXTRA_ARGS:                                   # Optional [default=]
-      HEALTHCHECK_WRITE_TEST: false                       # Optional [default=false]
       RCLONE_ENABLED: false                               # Optional [default=false]
       RCLONE_MODE: sync                                   # Optional [default=sync] sync (one-way local vault -> cloud), copy (copy new/changed files local vault -> cloud, no deletes)
       RCLONE_DESTINATIONS: remote:CryptomatorVault        # Required if RCLONE_ENABLED=true; remote must match a section in rclone.conf
