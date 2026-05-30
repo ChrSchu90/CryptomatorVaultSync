@@ -20,5 +20,5 @@ services:
       RSYNC_EXTRA_ARGS:                                   # Optional [default=]
       TZ: Europe/Berlin                                   # Optional
     volumes:
-      - '/docker/cryptomator-vault-sync/sync:/sync:ro'           # You can also mount multiple sub-directories, but /sync must be the root dir.
+      - '/docker/cryptomator-vault-sync/sync:/sync:ro'           # One-Way sync source, you can also mount multiple sub-directories, but /sync must be the root directory.
       - '/docker/cryptomator-vault-sync/vault:/vault-encrypted'  # A Cryptomator vault must be inside the mount, can also be linked to a OneDrive synced directory
