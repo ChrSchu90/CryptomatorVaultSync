@@ -19,7 +19,13 @@ services:
       RSYNC_ARGS: '-rtv --no-owner --no-group --no-perms' # Optional [default=-rtv --no-owner --no-group --no-perms]
       RSYNC_EXTRA_ARGS:                                   # Optional [default=]
       HEALTHCHECK_WRITE_TEST: false                       # Optional [default=false]
+      RCLONE_ENABLED: false                               # Optional [default=false]
+      RCLONE_MODE: sync                                   # Optional [default=sync] sync (one-way local vault -> cloud), copy (copy new/changed files local vault -> cloud, no deletes)
+      RCLONE_DESTINATION: remote:CryptomatorVault         # Optional but must match the `[xxx]` value inside `rclone.conf`
+      RCLONE_CONFIG: /rclone/rclone.conf                  # Optional [default=/rclone-config/rclone.conf]
+      RCLONE_EXTRA_ARGS:                                  # Optional [default=]
       TZ: Europe/Berlin                                   # Optional
     volumes:
-      - '/docker/cryptomator-vault-sync/sync:/sync:ro'           # One-Way sync source, you can also mount multiple sub-directories, but /sync must be the root directory.
-      - '/docker/cryptomator-vault-sync/vault:/vault-encrypted'  # A Cryptomator vault must be inside the mount, can also be linked to a OneDrive synced directory
+      - '/docker/cryptomator-vault-sync/sync:/sync:ro'                # One-Way sync source, you can also mount multiple sub-directories, but /sync must be the root directory.
+      - '/docker/cryptomator-vault-sync/vault:/vault-encrypted'       # A Cryptomator vault must be inside the mount, can also be linked to a OneDrive synced directory
+      - '/docker/cryptomator-vault-sync/rclone:/rclone'               # Reqired if `RCLONE_ENABLED=true` for rclone config

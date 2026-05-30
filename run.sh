@@ -7,6 +7,7 @@ EXIT_CONFIG_ERROR=2
 
 SYNC_DIR="${SYNC_DIR:-/sync}"
 
+MOUNT_TIMEOUT_SECONDS="${MOUNT_TIMEOUT_SECONDS:-60}"
 VAULT_ENCRYPTED_DIR="${VAULT_ENCRYPTED_DIR:-/vault-encrypted}"
 VAULT_DECRYPTED_DIR="/vault-decrypted" # Internal temporary mount point. The host usually cannot see its contents because the mount is created inside the container namespace.
 VAULT_DECRYPTED_BASE_DEV=""
@@ -17,9 +18,13 @@ CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-auto}"
 RSYNC_DELETE="${RSYNC_DELETE:-false}"
 RSYNC_ARGS="${RSYNC_ARGS:--rtv --no-owner --no-group --no-perms}"
 RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
-
-MOUNT_TIMEOUT_SECONDS="${MOUNT_TIMEOUT_SECONDS:-60}"
 SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
+
+RCLONE_ENABLED="${RCLONE_ENABLED:-false}"
+RCLONE_MODE="${RCLONE_MODE:-sync}"
+RCLONE_DESTINATION="${RCLONE_DESTINATION:-remote:CryptomatorVault}"
+RCLONE_CONFIG="${RCLONE_CONFIG:-/rclone/rclone.conf}"
+RCLONE_EXTRA_ARGS="${RCLONE_EXTRA_ARGS:-}"
 
 CRYPTOMATOR_PID=""
 WEBDAV_MOUNTED="false"
@@ -326,6 +331,28 @@ validate_config() {
   if ! [[ "$MOUNT_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || [[ "$MOUNT_TIMEOUT_SECONDS" == "0" ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "MOUNT_TIMEOUT_SECONDS must be a positive integer"
   fi
+
+  if [[ "$RCLONE_ENABLED" != "true" && "$RCLONE_ENABLED" != "false" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_ENABLED must be true or false"
+  fi
+  
+  if [[ "$RCLONE_ENABLED" == "true" ]]; then
+    if [[ -z "$RCLONE_DESTINATION" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "RCLONE_DESTINATION is required when RCLONE_ENABLED=true"
+    fi
+  
+    if [[ ! -f "$RCLONE_CONFIG" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "rclone config does not exist: $RCLONE_CONFIG"
+    fi
+  
+    case "$RCLONE_MODE" in
+      sync|copy)
+        ;;
+      *)
+        exit_failed "$EXIT_CONFIG_ERROR" "invalid RCLONE_MODE: $RCLONE_MODE. Allowed values: sync, copy"
+        ;;
+    esac
+  fi
 }
 
 load_password() {
@@ -352,17 +379,45 @@ mount_vault() {
   esac
 }
 
+run_rclone() {
+  if [[ "$RCLONE_ENABLED" != "true" ]]; then
+    return 0
+  fi
+
+  log_info "Running rclone $RCLONE_MODE $VAULT_ENCRYPTED_DIR -> $RCLONE_DESTINATION"
+
+  set +e
+  # shellcheck disable=SC2086
+  rclone "$RCLONE_MODE" "$VAULT_ENCRYPTED_DIR" "$RCLONE_DESTINATION" \
+    --config "$RCLONE_CONFIG" \
+    $RCLONE_EXTRA_ARGS
+  local rclone_exit_code="$?"
+  set -e
+
+  if [[ "$rclone_exit_code" -ne 0 ]]; then
+    exit_failed "$EXIT_GENERAL_ERROR" "rclone failed with exit code $rclone_exit_code"
+  fi
+
+  log_info "rclone finished."
+}
+
+sync_cycle() {
+  mount_vault
+  sync_once
+  cleanup_resources
+  run_rclone
+}
+
 run_sync() {
   if [[ "$SYNC_INTERVAL_MINUTES" == "0" ]]; then
-    sync_once
+    sync_cycle
     log_info "One-shot sync finished."
     return 0
   fi
 
   log_info "Continuous sync enabled. Interval: ${SYNC_INTERVAL_MINUTES} minute(s)"
-
   while true; do
-    sync_once
+    sync_cycle
     sleep "$((SYNC_INTERVAL_MINUTES * 60))"
   done
 }
@@ -370,7 +425,6 @@ run_sync() {
 main() {
   validate_config
   load_password
-  mount_vault
   run_sync
 }
 
