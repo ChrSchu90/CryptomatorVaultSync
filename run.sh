@@ -29,6 +29,13 @@ RCLONE_EXTRA_ARGS="${RCLONE_EXTRA_ARGS:-}"
 CRYPTOMATOR_PID=""
 WEBDAV_MOUNTED="false"
 
+trim() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
 log_info() {
   printf '[%s] \033[94mINF\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
@@ -391,6 +398,8 @@ run_rclone() {
   IFS='|' read -r -a destinations <<< "$RCLONE_DESTINATIONS"
 
   for destination in "${destinations[@]}"; do
+    destination="$(trim "$destination")"
+
     if [[ -z "$destination" ]]; then
       continue
     fi
