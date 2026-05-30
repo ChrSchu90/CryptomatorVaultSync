@@ -91,8 +91,7 @@ log "TEST: healthcheck.sh syntax check"
 bash -n healthcheck.sh
 
 log "Building test image..."
-docker buildx build --load -t "$IMAGE_NAME" .
-#docker buildx build --load --no-cache --pull -t "$IMAGE_NAME" .
+docker buildx build --load --no-cache -t "$IMAGE_NAME" .
 
 indent_gray_output() {
   sed 's/^/  \x1b[90m│ /; s/$/\x1b[0m/'
