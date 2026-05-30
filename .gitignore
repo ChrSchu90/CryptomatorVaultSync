@@ -29,6 +29,9 @@ mono_crash.*
 [Rr]eleases/x64/
 bin/x64/
 obj/x64/
+/tests/sync/
+/tests/tmp-vault/
+/tests/rclone-remote/
 
 [Dd]ebug/x86/
 [Dd]ebugPublic/x86/
