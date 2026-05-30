@@ -11,8 +11,7 @@ docker buildx build --load --progress=plain --platform ${DOCKER_PLATFORM} --buil
   docker run --rm -it --platform ${DOCKER_PLATFORM} \
     --env-file ./debug/.env \
     -v ./debug/sync:/sync:ro \
-    -v ./debug/vault-encrypted:/vault-encrypted \
-    -v ./debug/vault-decrypted:/vault-decrypted \
+    -v ./debug/vault:/vault-encrypted \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
     --security-opt apparmor:unconfined \

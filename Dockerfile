@@ -46,8 +46,8 @@ COPY --chmod=755 run.sh /run.sh
 
 # /sync             Source root dir with files that should be synced
 # /vault-encrypted  Encrypted Cryptomator vault mount
-# /vault-decrypted  Decrypted Cryptomator vault mount
-VOLUME ["/sync", "/vault-encrypted", "/vault-decrypted"]
+# The vault-decrypted mount is internally, since the host can not see the content anyways
+VOLUME ["/sync", "/vault-encrypted"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/run.sh"]

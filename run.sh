@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 SYNC_DIR="${SYNC_DIR:-/sync}"
 VAULT_ENCRYPTED_DIR="${VAULT_ENCRYPTED_DIR:-/vault-encrypted}"
-VAULT_DECRYPTED_DIR="${VAULT_DECRYPTED_DIR:-/vault-decrypted}"
+VAULT_DECRYPTED_DIR="/vault-decrypted" # The vault-decrypted mount is internally, since the host can not see the content anyways
 VAULT_DECRYPTED_BASE_DEV=""
 
 CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-auto}"

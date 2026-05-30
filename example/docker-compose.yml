@@ -12,7 +12,6 @@ services:
       CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"       # Required
       SYNC_DIR: /sync                                     # Optional [default=/sync]
       VAULT_ENCRYPTED_DIR: /vault-encrypted               # Optional [default=/vault-encrypted]
-      VAULT_DECRYPTED_DIR: /vault-decrypted               # Optional [default=/vault-decrypted]
       CRYPTOMATOR_MOUNT_MODE: auto                        # Optional [default=auto] fuse, webdav, auto
       MOUNT_TIMEOUT_SECONDS: 60                           # Optional [default=60]
       SYNC_INTERVAL_MINUTES: 0                            # Optional 0=one-time [default=0]
@@ -22,8 +21,4 @@ services:
       TZ: Europe/Berlin                                   # Optional
     volumes:
       - '/docker/cryptomator-vault-sync/sync:/sync:ro'           # You can also mount multiple sub-directoies, but /sync must be the root dir.
-      - '/docker/cryptomator-vault-sync/vault:/vault-encrypted'  # A cruptomator vault must be inside the mount, can also be linked to a OneDrive synced directory
-      - 'vault-decrypted:/vault-decrypted'                       # Files are not visible from host! To see the content use the /sync directory
-
-volumes:
-  vault-decrypted:
+      - '/docker/cryptomator-vault-sync/vault:/vault-encrypted'  # A Cryptomator vault must be inside the mount, can also be linked to a OneDrive synced directory
