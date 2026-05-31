@@ -30,6 +30,7 @@ services:
       UPSTREAM_START_DELAY_SECONDS: 0                     # Optional [default=0] delay after unmounting the vault before running rclone
       TZ: Europe/Berlin                                   # Optional
     volumes:
-      - '/docker/cryptomator-vault-sync/sync:/sync:ro'                # One-Way sync source, you can also mount multiple sub-directories, but /sync must be the root directory.
-      - '/docker/cryptomator-vault-sync/vault:/vault-encrypted'       # A Cryptomator vault must be inside the mount, can also be linked to a OneDrive synced directory
-      - '/docker/cryptomator-vault-sync/rclone:/rclone'               # Required if `UPSTREAM_ENABLED=true` for rclone config
+      - '/docker/cryptomator-vault-sync/sync:/sync:ro'          # One-Way sync source, you can also mount multiple sub-directories, but /sync must be the root directory.
+      - '/docker/cryptomator-vault-sync/vault:/vault-encrypted' # A Cryptomator vault must be inside the mount, can also be linked to a OneDrive synced directory
+      - '/docker/cryptomator-vault-sync/rclone:/rclone'         # Required if `UPSTREAM_ENABLED=true` for rclone config
+      - '/docker/cryptomator-vault-sync/state:/state'           # Optional directory with status files for monitoring
