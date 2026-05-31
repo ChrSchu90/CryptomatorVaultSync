@@ -213,7 +213,7 @@ log "TEST: Missing vault password"
 assert_exit_code 2 \
   docker_run
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "CRYPTOMATOR_VAULT_PASSWORD is required"
 
 log "TEST: Invalid CRYPTOMATOR_MOUNT_MODE"
 assert_exit_code 2 \
@@ -221,7 +221,7 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e CRYPTOMATOR_MOUNT_MODE=invalid
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "Invalid CRYPTOMATOR_MOUNT_MODE:"
 
 log "TEST: Invalid RSYNC_DELETE"
 assert_exit_code 2 \
@@ -229,7 +229,7 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e RSYNC_DELETE=invalid
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "RSYNC_DELETE must be true or false"
 
 log "TEST: Invalid SYNC_INTERVAL_MINUTES"
 assert_exit_code 2 \
@@ -237,7 +237,7 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e SYNC_INTERVAL_MINUTES=invalid
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "SYNC_INTERVAL_MINUTES must be a non-negative integer"
 
 log "TEST: Invalid MOUNT_TIMEOUT_SECONDS"
 assert_exit_code 2 \
@@ -245,7 +245,7 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e MOUNT_TIMEOUT_SECONDS=0
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "MOUNT_TIMEOUT_SECONDS must be a positive integer"
 
 log "TEST: Invalid UPSTREAM_ENABLED"
 assert_exit_code 2 \
@@ -253,7 +253,7 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_ENABLED=invalid
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "UPSTREAM_ENABLED must be true or false"
 
 log "TEST: Invalid UPSTREAM_FAIL_ACTION"
 assert_exit_code 2 \
@@ -261,7 +261,7 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_FAIL_ACTION=invalid
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "Invalid UPSTREAM_FAIL_ACTION:"
 
 log "TEST: Invalid UPSTREAM_DESTINATIONS"
 assert_exit_code 2 \
@@ -270,7 +270,7 @@ assert_exit_code 2 \
     -e UPSTREAM_ENABLED=true \
     -e UPSTREAM_DESTINATIONS=
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "UPSTREAM_DESTINATIONS is required when UPSTREAM_ENABLED=true"
 
 log "TEST: Invalid UPSTREAM_CONFIG"
 assert_exit_code 2 \
@@ -280,7 +280,7 @@ assert_exit_code 2 \
     -e UPSTREAM_DESTINATIONS=remote:Vault \
     -e UPSTREAM_CONFIG=/rclone/missing.conf
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "Rclone config does not exist: /rclone/missing.conf"
 
 log "TEST: Invalid UPSTREAM_MODE"
 assert_exit_code 2 \
@@ -291,7 +291,7 @@ assert_exit_code 2 \
     -e UPSTREAM_DESTINATIONS=remote:Vault \
     -e UPSTREAM_CONFIG=/rclone/rclone.conf
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "Invalid UPSTREAM_MODE:"
 
 log "TEST: Invalid UPSTREAM_START_DELAY_SECONDS"
 assert_exit_code 2 \
@@ -302,7 +302,7 @@ assert_exit_code 2 \
     -e UPSTREAM_CONFIG=/rclone/rclone.conf \
     -e UPSTREAM_START_DELAY_SECONDS=-1
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "UPSTREAM_START_DELAY_SECONDS must be a non-negative integer"
 
 log "TEST: One-shot vault file copy"
 docker_cleanup
@@ -345,6 +345,16 @@ assert_exit_code 1 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_DESTINATIONS=invalid:temp-vault
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+
+log "TEST: One-shot vault rclone with action continue still exits"
+assert_exit_code 1 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_FAIL_ACTION=continue \
     -e UPSTREAM_DESTINATIONS=invalid:temp-vault
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_exists ./tests/state/last-error
@@ -402,15 +412,5 @@ if [[ "$before_b" == "$after_b" ]]; then
 fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
-
-log "TEST: One-shot upstream fail action continue still exits"
-assert_exit_code 1 \
-  docker_run \
-    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e UPSTREAM_ENABLED=true \
-    -e UPSTREAM_FAIL_ACTION=continue \
-    -e UPSTREAM_DESTINATIONS=invalid:temp-vault
-assert_file_contains_status ./tests/state/current-status failed
-assert_file_exists ./tests/state/last-error
 
 log "All tests passed!"

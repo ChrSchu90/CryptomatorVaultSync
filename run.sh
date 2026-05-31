@@ -359,7 +359,7 @@ validate_config() {
     fuse|webdav|auto)
       ;;
     *)
-      exit_failed "$EXIT_CONFIG_ERROR" "invalid CRYPTOMATOR_MOUNT_MODE: $CRYPTOMATOR_MOUNT_MODE. Allowed values: fuse, webdav, auto"
+      exit_failed "$EXIT_CONFIG_ERROR" "Invalid CRYPTOMATOR_MOUNT_MODE: $CRYPTOMATOR_MOUNT_MODE. Allowed values: fuse, webdav, auto"
       ;;
   esac
 
@@ -367,7 +367,7 @@ validate_config() {
     exit|continue)
       ;;
     *)
-      exit_failed "$EXIT_CONFIG_ERROR" "invalid UPSTREAM_FAIL_ACTION: $UPSTREAM_FAIL_ACTION. Allowed values: exit, continue"
+      exit_failed "$EXIT_CONFIG_ERROR" "Invalid UPSTREAM_FAIL_ACTION: $UPSTREAM_FAIL_ACTION. Allowed values: exit, continue"
       ;;
   esac
 
@@ -393,7 +393,7 @@ validate_config() {
     fi
   
     if [[ ! -f "$UPSTREAM_CONFIG" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "rclone config does not exist: $UPSTREAM_CONFIG"
+      exit_failed "$EXIT_CONFIG_ERROR" "Rclone config does not exist: $UPSTREAM_CONFIG"
     fi
 
     if ! [[ "$UPSTREAM_START_DELAY_SECONDS" =~ ^[0-9]+$ ]]; then
@@ -404,7 +404,7 @@ validate_config() {
       sync|copy)
         ;;
       *)
-        exit_failed "$EXIT_CONFIG_ERROR" "invalid UPSTREAM_MODE: $UPSTREAM_MODE. Allowed values: sync, copy"
+        exit_failed "$EXIT_CONFIG_ERROR" "Invalid UPSTREAM_MODE: $UPSTREAM_MODE. Allowed values: sync, copy"
         ;;
     esac
   fi
@@ -495,18 +495,18 @@ run_rclone() {
     set -e
 
     if [[ "$rclone_exit_code" -ne 0 ]]; then
-      handle_upstream_error "rclone failed for destination '$destination' with exit code $rclone_exit_code"
+      handle_upstream_error "Rclone failed for destination '$destination' with exit code $rclone_exit_code"
       return 1
     fi
 
-    log_info "rclone finished for destination: $destination"
+    log_info "Rclone finished for destination: $destination"
   done
 
   if [[ "$destination_count" -eq 0 ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_DESTINATIONS does not contain any valid destination"
   fi
 
-  log_info "rclone finished for all destinations."
+  log_info "Rclone finished for all destinations."
 }
 
 sync_cycle() {
