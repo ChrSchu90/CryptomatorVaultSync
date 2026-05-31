@@ -109,7 +109,11 @@ Directory for the optional `rclone.conf` is becomes required when `UPSTREAM_ENAB
 
 ### `/state`
 
-Is a **optional** volumen where the container writes a small set of status files to `/state`. 
+Is a **optional** volumen where the container writes a small set of status files. Those files can be used for e.g. external monitoring systems.
+
+In one-shot mode (`SYNC_INTERVAL_MINUTES=0`), the container exits after the sync cycle and the container *exit code* is the primary status signal.
+
+In continuous mode, the Docker healthcheck reads `/state/current-status` to determine the current health state.
 
 The state directory contains three files:
 | File             | Description                                                           |
@@ -354,7 +358,7 @@ UPSTREAM_DESTINATIONS=gdrive:Vaults/Backup Vault
 
 ## 💥 Error handling and restarts
 
-The container exits on configuration errors, mount errors, rsync errors, and rclone errors.
+The container exits on configuration errors, mount errors, rsync errors, and upstream errors, unless configured otherwise.
 
 This is intentional: failed sync cycles should be visible to the container runtime, schedulers, or monitoring tools.
 
