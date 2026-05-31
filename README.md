@@ -127,12 +127,13 @@ Directory for the optional `rclone.conf` in case `UPSTREAM_ENABLED=true`
 | `RSYNC_EXTRA_ARGS`             | empty              | Additional rsync arguments                                           |
 | `MOUNT_TIMEOUT_SECONDS`        | `60`               | Timeout for mount operations                                         |
 | `SYNC_INTERVAL_MINUTES`        | `0`                | `0` means one-shot mode; any positive value enables continuous sync  |
-| `UPSTREAM_ENABLED`               | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
-| `UPSTREAM_MODE`                  | `sync`             | rclone operation mode. Supported values: `sync` and `copy`. `sync` mirrors the encrypted vault to the destination, including deletions. `copy` uploads new/changed files without deleting remote files. |
-| `UPSTREAM_DESTINATIONS`          | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault` |
-| `UPSTREAM_CONFIG`                | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
-| `UPSTREAM_EXTRA_ARGS`            | empty              | Additional arguments passed to rclone                                |
-| `UPSTREAM_START_DELAY_SECONDS`   | `0`                | Optional delay between rsync (`sync` -> `vault`) and rclone (`vault` -> `remote`) |
+| `UPSTREAM_ENABLED`             | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
+| `UPSTREAM_FAIL_ACTION`         | `exit`             | **Ignored in one-shot mode**; `exit` rclone error terminates the container with exit code. `continue` only creates a log and continous |
+| `UPSTREAM_MODE`                | `sync`             | rclone operation mode. Supported values: `sync` and `copy`. `sync` mirrors the encrypted vault to the destination, including deletions. `copy` uploads new/changed files without deleting remote files. |
+| `UPSTREAM_DESTINATIONS`        | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault`   |
+| `UPSTREAM_CONFIG`              | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
+| `UPSTREAM_EXTRA_ARGS`          | empty              | Additional arguments passed to rclone                                |
+| `UPSTREAM_START_DELAY_SECONDS` | `0`                | Optional delay between rsync (`sync` -> `vault`) and rclone (`vault` -> `remote`) |
 
 
 ## 🏷️ Image Labels

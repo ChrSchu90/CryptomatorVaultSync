@@ -22,6 +22,7 @@ services:
       RSYNC_ARGS: '-rtv --no-owner --no-group --no-perms' # Optional [default=-rtv --no-owner --no-group --no-perms]
       RSYNC_EXTRA_ARGS:                                   # Optional [default=]
       UPSTREAM_ENABLED: false                             # Optional [default=false]
+      UPSTREAM_FAIL_ACTION: exit                          # Optional [default=exit]
       UPSTREAM_MODE: sync                                 # Optional [default=sync] sync (one-way local vault -> cloud), copy (copy new/changed files local vault -> cloud, no deletes)
       UPSTREAM_DESTINATIONS: remote:CryptomatorVault      # Required if UPSTREAM_ENABLED=true; remote must match a section in rclone.conf
       UPSTREAM_CONFIG: /rclone/rclone.conf                # Optional [default=/rclone/rclone.conf]

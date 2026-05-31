@@ -117,7 +117,7 @@ log "TEST: Missing vault password"
 assert_exit_code 2 \
   docker_run
 
-log "TEST: Invalid mount mode"
+log "TEST: Invalid CRYPTOMATOR_MOUNT_MODE"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD=${VAULT_PASSWORD} \
@@ -146,6 +146,12 @@ assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_ENABLED=invalid
+
+log "TEST: Invalid UPSTREAM_FAIL_ACTION"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_FAIL_ACTION=invalid
 
 log "TEST: Invalid UPSTREAM_DESTINATIONS"
 assert_exit_code 2 \

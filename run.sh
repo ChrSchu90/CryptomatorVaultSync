@@ -21,6 +21,7 @@ RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
 SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
 
 UPSTREAM_ENABLED="${UPSTREAM_ENABLED:-false}"
+UPSTREAM_FAIL_ACTION="${UPSTREAM_FAIL_ACTION:-exit}"
 UPSTREAM_MODE="${UPSTREAM_MODE:-sync}"
 UPSTREAM_DESTINATIONS="${UPSTREAM_DESTINATIONS:-}"
 UPSTREAM_CONFIG="${UPSTREAM_CONFIG:-/rclone/rclone.conf}"
@@ -328,6 +329,14 @@ validate_config() {
       ;;
   esac
 
+  case "$UPSTREAM_FAIL_ACTION" in
+    exit|continue)
+      ;;
+    *)
+      exit_failed "$EXIT_CONFIG_ERROR" "invalid UPSTREAM_FAIL_ACTION: $UPSTREAM_FAIL_ACTION. Allowed values: exit, continue"
+      ;;
+  esac
+
   if [[ "$RSYNC_DELETE" != "true" && "$RSYNC_DELETE" != "false" ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_DELETE must be true or false"
   fi
@@ -406,6 +415,20 @@ prepare_vault_for_rclone() {
   fi
 }
 
+handle_upstream_error() {
+  local message="$1"
+
+  write_status "last-error" "$message"
+
+  if [[ "$SYNC_INTERVAL_MINUTES" != "0" && "$UPSTREAM_FAIL_ACTION" == "continue" ]]; then
+    log_error "$message"
+    log_warn "Continuing despite upstream error. Next cycle will retry."
+    return 0
+  fi
+
+  exit_failed "$EXIT_GENERAL_ERROR" "$message"
+}
+
 run_rclone() {
   if [[ "$UPSTREAM_ENABLED" != "true" ]]; then
     return 0
@@ -437,7 +460,8 @@ run_rclone() {
     set -e
 
     if [[ "$rclone_exit_code" -ne 0 ]]; then
-      exit_failed "$EXIT_GENERAL_ERROR" "rclone failed for destination '$destination' with exit code $rclone_exit_code"
+      handle_upstream_error "rclone failed for destination '$destination' with exit code $rclone_exit_code"
+      return 0
     fi
 
     log_info "rclone finished for destination: $destination"
