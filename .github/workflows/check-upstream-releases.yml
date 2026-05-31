@@ -22,7 +22,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v6
     
-    - name: Get upstream version info
+    - name: Get Upstream Version Info
       id: versions
       env:
         GH_TOKEN: ${{ github.token }}
@@ -49,12 +49,12 @@ jobs:
         echo "rclone_changed=$rclone_changed" >> "$GITHUB_OUTPUT"
         echo "::notice::[info] rclone_changed=$rclone_changed"
 
-        [[ "$rclone_changed" == "true" || "$cryptomator_changed" == "true" ]] && version_changed=true || version_changed=false
-        echo "version_changed=$version_changed" >> "$GITHUB_OUTPUT"
-        echo "::notice::[info] version_changed=$version_changed"
+        [[ "$rclone_changed" == "true" || "$cryptomator_changed" == "true" ]] && update_available=true || update_available=false
+        echo "update_available=$update_available" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] update_available=$update_available"
 
-    - name: Update Upstream versions
-      if: ${{ steps.versions.outputs.version_changed == 'true' }}
+    - name: Update Upstream Versions
+      if: ${{ steps.versions.outputs.update_available == 'true' }}
       run: |
         set -euo pipefail
         
@@ -64,8 +64,8 @@ jobs:
         sed -i -E 's/^(ARG RCLONE_RELEASE=).*/\1${{ steps.versions.outputs.rclone_latest }}/' Dockerfile
         sed -i -E 's/^(ARG RCLONE_RELEASE=).*/\1${{ steps.versions.outputs.rclone_latest }}/' debug.sh
     
-    - name: Create pull request
-      if: ${{ steps.versions.outputs.version_changed == 'true' }}
+    - name: Create Pull Request
+      if: ${{ steps.versions.outputs.update_available == 'true' }}
       uses: peter-evans/create-pull-request@v8
       with:
         branch: feature/UpstreamReleaseUpdate
