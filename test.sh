@@ -20,6 +20,7 @@ exit_failed() {
 }
 
 cleanup() {
+  fix_test_file_permissions
   rm -rf ./tests/rclone-remote ./tests/sync ./tests/tmp-vault ./tests/state
   docker image rm "$IMAGE_NAME" >/dev/null 2>&1 || true
 }
@@ -140,6 +141,19 @@ assert_file_contains_status() {
   log "PASSED: $file status is $expected_status"
 }
 
+assert_file_contains_text() {
+  local file="$1"
+  local expected_text="$2"
+
+  assert_file_exists "$file"
+
+  if ! grep -Fq "$expected_text" "$file"; then
+    exit_failed "FAILED: expected $file to contain '$expected_text'"
+  fi
+
+  log "PASSED: $file contains expected text"
+}
+
 trap cleanup EXIT
 
 log "Preparing test directories and files..."
@@ -160,6 +174,13 @@ assert_exit_code 0 \
   docker_run_healthcheck \
     -e SYNC_INTERVAL_MINUTES=0
 
+log "TEST: Healthcheck starting status"
+docker_cleanup
+printf '2026-05-30 22:10:00 starting\n' > ./tests/state/current-status
+assert_exit_code 0 \
+  docker_run_healthcheck \
+    -e SYNC_INTERVAL_MINUTES=1
+
 log "TEST: Healthcheck idle status"
 docker_cleanup
 printf '2026-05-30 22:10:00 idle\n' > ./tests/state/current-status
@@ -171,6 +192,13 @@ log "TEST: Healthcheck upstream-error status"
 docker_cleanup
 printf '2026-05-30 22:10:00 upstream-error\n' > ./tests/state/current-status
 assert_exit_code 1 \
+  docker_run_healthcheck \
+    -e SYNC_INTERVAL_MINUTES=1
+
+log "TEST: Healthcheck stopped status"
+docker_cleanup
+printf '2026-05-30 22:10:00 stopped\n' > ./tests/state/current-status
+assert_exit_code 0 \
   docker_run_healthcheck \
     -e SYNC_INTERVAL_MINUTES=1
 
@@ -290,6 +318,28 @@ fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
 
+log "TEST: RSYNC_DELETE true changes vault after source deletion"
+docker_cleanup
+echo "file to delete" > ./tests/sync/delete-me.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e RSYNC_DELETE=true
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+before_delete="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+rm -f ./tests/sync/delete-me.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e RSYNC_DELETE=true
+after_delete="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before_delete" == "$after_delete" ]]; then
+  exit_failed "FAILED: Vault did not change after source deletion with RSYNC_DELETE=true"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
 log "TEST: One-shot vault rclone copy with invalid destination"
 assert_exit_code 1 \
   docker_run \
@@ -327,6 +377,28 @@ assert_exit_code 0 \
 after="$(find ./tests/rclone-remote/temp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before" == "$after" ]]; then
   exit_failed "FAILED: Remote did not change after sync with empty destination entries"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: One-shot vault rclone copy to multiple destinations"
+docker_cleanup
+mkdir -p ./tests/rclone-remote/temp-vault-a ./tests/rclone-remote/temp-vault-b
+before_a="$(find ./tests/rclone-remote/temp-vault-a -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+before_b="$(find ./tests/rclone-remote/temp-vault-b -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from multiple destination test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_DESTINATIONS="remote:temp-vault-a|remote:temp-vault-b"
+after_a="$(find ./tests/rclone-remote/temp-vault-a -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+after_b="$(find ./tests/rclone-remote/temp-vault-b -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before_a" == "$after_a" ]]; then
+  exit_failed "FAILED: Remote A did not change after sync"
+fi
+if [[ "$before_b" == "$after_b" ]]; then
+  exit_failed "FAILED: Remote B did not change after sync"
 fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
