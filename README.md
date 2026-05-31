@@ -25,7 +25,7 @@ The container writes files into a local Cryptomator vault. The encrypted vault d
 ```
 In that setup, `rclone` is not required inside this container, the host handles the upstream sync.
 
-If the host does not provide a cloud sync mechanism, the optional [rclone](https://github.com/rclone/rclone) upstream integration can be enabled as a fallback to sync the encrypted vault to one or more remote destinations (offside or in local network).
+If the host does not provide a cloud sync mechanism, the optional [rclone](https://github.com/rclone/rclone) upstream integration can be enabled as a fallback to sync the encrypted vault to one or more remote destinations (offsite or in local network).
 
 ## ⛔ What this project does not do
 
@@ -52,6 +52,7 @@ Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative sour
 - Configurable one-shot or interval-based sync
 - Simple exit-code behavior
 - Healthcheck
+- Optional `/state` volume for monitoring files
 - Optional `rclone` to remote destinations
 
 ## 📋 Requirements
@@ -59,14 +60,6 @@ Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative sour
 The container needs permission to create FUSE mounts.
 
 For all supported modes in the current architecture, use:
-
-```bash
---cap-add SYS_ADMIN \
---device /dev/fuse:/dev/fuse \
---security-opt apparmor:unconfined
-```
-
-Explanation:
 
 - `--device /dev/fuse:/dev/fuse` gives the container access to the host FUSE device.
 - `--cap-add SYS_ADMIN` allows mount operations inside the container.
@@ -112,7 +105,41 @@ The decrypted mount is intentionally internal. Even if `/vault-decrypted` is bin
 
 ### `/rclone`
 
-Directory for the optional `rclone.conf` in case `UPSTREAM_ENABLED=true`
+Directory for the optional `rclone.conf` is becomes required when `UPSTREAM_ENABLED=true`
+
+### `/state`
+
+Is a **optional** volumen where the container writes a small set of status files to `/state`. 
+
+The state directory contains three files:
+| File             | Description                                                           |
+| ---------------- | --------------------------------------------------------------------- |
+| `current-status` | Current container status. Used by the healthcheck in continuous mode. |
+| `last-success`   | Timestamp of the last fully successful sync cycle.                    |
+| `last-error`     | Timestamp and message of the last error.                              |
+
+Example:
+```text
+/state/current-status
+2026-05-30 22:10:00 idle
+
+/state/last-success
+2026-05-30 22:10:00
+
+/state/last-error
+2026-05-30 22:05:00 rclone failed for destination 'gdrive:Vault' with exit code 1
+```
+
+Possible `current-status` values:
+| Status           | Meaning                                                                                 |
+| ---------------- | --------------------------------------------------------------------------------------- |
+| `starting`       | Container has started and is validating configuration.                                  |
+| `running`        | A sync cycle is currently running.                                                      |
+| `idle`           | Last sync cycle completed successfully and the container is waiting for the next cycle. |
+| `upstream-error` | The local vault sync completed, but the optional upstream sync failed.                  |
+| `failed`         | The container hit a fatal error and is exiting.                                         |
+| `stopped`        | The container stopped cleanly.                                                          |
+
 
 ## ⚙️ Environment variables
 
@@ -128,7 +155,7 @@ Directory for the optional `rclone.conf` in case `UPSTREAM_ENABLED=true`
 | `MOUNT_TIMEOUT_SECONDS`        | `60`               | Timeout for mount operations                                         |
 | `SYNC_INTERVAL_MINUTES`        | `0`                | `0` means one-shot mode; any positive value enables continuous sync  |
 | `UPSTREAM_ENABLED`             | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
-| `UPSTREAM_FAIL_ACTION`         | `exit`             | **Ignored in one-shot mode**; `exit` rclone error terminates the container with exit code. `continue` only creates a log and continous |
+| `UPSTREAM_FAIL_ACTION`         | `exit`             | Behavior when rclone fails. `exit` stops the container with exit code; `continue` logs the error and retries on the next cycle in continuous mode. **One-shot mode always exits on upstream errors.** |
 | `UPSTREAM_MODE`                | `sync`             | rclone operation mode. Supported values: `sync` and `copy`. `sync` mirrors the encrypted vault to the destination, including deletions. `copy` uploads new/changed files without deleting remote files. |
 | `UPSTREAM_DESTINATIONS`        | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault`   |
 | `UPSTREAM_CONFIG`              | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
