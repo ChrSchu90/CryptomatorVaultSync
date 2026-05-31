@@ -6,6 +6,7 @@ EXIT_GENERAL_ERROR=1
 EXIT_CONFIG_ERROR=2
 
 SYNC_DIR="${SYNC_DIR:-/sync}"
+STATE_DIR="${STATE_DIR:-/state}"
 
 MOUNT_TIMEOUT_SECONDS="${MOUNT_TIMEOUT_SECONDS:-60}"
 VAULT_ENCRYPTED_DIR="${VAULT_ENCRYPTED_DIR:-/vault-encrypted}"
@@ -30,6 +31,7 @@ UPSTREAM_START_DELAY_SECONDS="${UPSTREAM_START_DELAY_SECONDS:-0}"
 
 CRYPTOMATOR_PID=""
 WEBDAV_MOUNTED="false"
+EXIT_IS_FAILURE="false"
 
 trim() {
   local value="$1"
@@ -38,23 +40,51 @@ trim() {
   printf '%s' "$value"
 }
 
+timestamp() {
+  date '+%Y-%m-%d %H:%M:%S'
+}
+
+ensure_state_dir() {
+  mkdir -p "$STATE_DIR" 2>/dev/null || true
+}
+
+write_status() {
+  local name="$1"
+  shift || true
+  local message="$*"
+
+  ensure_state_dir
+
+  if [[ -d "$STATE_DIR" && -w "$STATE_DIR" ]]; then
+    if [[ -n "$message" ]]; then
+      printf '%s %s\n' "$(timestamp)" "$message" > "$STATE_DIR/$name"
+    else
+      printf '%s\n' "$(timestamp)" > "$STATE_DIR/$name"
+    fi
+  fi
+}
+
 log_info() {
-  printf '[%s] \033[94mINF\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+  printf '[%s] \033[94mINF\033[0m: %s\n' "$(timestamp)" "$*"
 }
 
 log_warn() {
-  printf '[%s] \033[93mWRN\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+  printf '[%s] \033[93mWRN\033[0m: %s\n' "$(timestamp)" "$*"
 }
 
 log_error() {
-  printf '[%s] \033[91mERR\033[0m: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+  printf '[%s] \033[91mERR\033[0m: %s\n' "$(timestamp)" "$*"
 }
 
 exit_failed() {
   local exit_code="$1"
   shift
 
+  EXIT_IS_FAILURE="true"
+
   log_error "$*"
+  write_status "last-error" "$*"
+  write_status "current-status" "failed"
   exit "$exit_code"
 }
 
@@ -101,6 +131,10 @@ cleanup_resources() {
 cleanup() {
   trap - EXIT INT TERM
   cleanup_resources
+
+  if [[ "$EXIT_IS_FAILURE" != "true" ]]; then
+    write_status "current-status" "stopped"
+  fi
 }
 
 trap cleanup EXIT
@@ -419,6 +453,7 @@ handle_upstream_error() {
   local message="$1"
 
   write_status "last-error" "$message"
+  write_status "current-status" "upstream-error"
 
   if [[ "$SYNC_INTERVAL_MINUTES" != "0" && "$UPSTREAM_FAIL_ACTION" == "continue" ]]; then
     log_error "$message"
@@ -461,7 +496,7 @@ run_rclone() {
 
     if [[ "$rclone_exit_code" -ne 0 ]]; then
       handle_upstream_error "rclone failed for destination '$destination' with exit code $rclone_exit_code"
-      return 0
+      return 1
     fi
 
     log_info "rclone finished for destination: $destination"
@@ -475,11 +510,20 @@ run_rclone() {
 }
 
 sync_cycle() {
+  write_status "current-status" "running"
+
   mount_vault
   sync_once
   cleanup_resources
   prepare_vault_for_rclone
-  run_rclone
+
+  if ! run_rclone; then
+    write_status "last-error" "sync cycle finished with upstream error"
+    return 0
+  fi
+
+  write_status "last-success"
+  write_status "current-status" "idle"
 }
 
 run_sync() {
@@ -497,6 +541,7 @@ run_sync() {
 }
 
 main() {
+  write_status "current-status" "starting"
   validate_config
   load_password
   run_sync
