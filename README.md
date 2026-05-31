@@ -20,7 +20,9 @@ This project was built for a simple NAS backup scenario:
 - The encrypted vault should still be accessible with regular clients, for example from a laptop or phone.
 
 The container writes files into a local Cryptomator vault. The encrypted vault directory can then be synced upstream by the host itself, for example using Synology's built-in Google Drive or OneDrive sync support.
-
+```text
+/sync source dirs -> container -> local encrypted vault -> Synology Cloud Sync -> Google Drive/OneDrive
+```
 In that setup, `rclone` is not required inside this container, the host handles the upstream sync.
 
 If the host does not provide a cloud sync mechanism, the optional [rclone](https://github.com/rclone/rclone) upstream integration can be enabled as a fallback to sync the encrypted vault to one or more remote destinations (offside or in local network).
