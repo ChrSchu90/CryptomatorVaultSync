@@ -59,10 +59,10 @@ jobs:
         set -euo pipefail
         
         sed -i -E 's/^(ARG CRYPTOMATOR_CLI_RELEASE=).*/\1${{ steps.versions.outputs.cryptomator_latest }}/' Dockerfile
-        sed -i -E 's/^(ARG CRYPTOMATOR_CLI_RELEASE=).*/\1${{ steps.versions.outputs.cryptomator_latest }}/' debug.sh
+        sed -i -E 's/^(CRYPTOMATOR_CLI_RELEASE=).*/\1${{ steps.versions.outputs.cryptomator_latest }}/' debug.sh
 
         sed -i -E 's/^(ARG RCLONE_RELEASE=).*/\1${{ steps.versions.outputs.rclone_latest }}/' Dockerfile
-        sed -i -E 's/^(ARG RCLONE_RELEASE=).*/\1${{ steps.versions.outputs.rclone_latest }}/' debug.sh
+        sed -i -E 's/^(RCLONE_RELEASE=).*/\1${{ steps.versions.outputs.rclone_latest }}/' debug.sh
     
     - name: Create Pull Request
       if: ${{ steps.versions.outputs.update_available == 'true' }}
