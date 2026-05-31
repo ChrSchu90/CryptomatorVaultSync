@@ -1,0 +1,80 @@
+name: Check Upstream Releases
+
+# Required Repo Setting!!! Settings → Actions → General → Workflow permissions [`Allow GitHub Actions to create and approve pull requests`]
+
+on:
+  schedule:
+    - cron: '0 10 * * 5' # Every Friday at 10:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: check-upstream-releases
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+    
+    - name: Get upstream version info
+      id: versions
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        
+        cryptomator_current="$(sed -n -E 's/^ARG CRYPTOMATOR_CLI_RELEASE=//p' Dockerfile | head -n1)"
+        echo "cryptomator_current=$cryptomator_current" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] cryptomator_current=$cryptomator_current"
+        cryptomator_latest="$(gh release view --repo cryptomator/cli --json tagName --jq '.tagName' | sed 's/^v//')"
+        echo "cryptomator_latest=$cryptomator_latest" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] cryptomator_latest=$cryptomator_latest"
+        [[ "$cryptomator_current" != "$cryptomator_latest" ]] && cryptomator_changed=true || cryptomator_changed=false
+        echo "cryptomator_changed=$cryptomator_changed" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] cryptomator_changed=$cryptomator_changed"
+        
+        rclone_current="$(sed -n -E 's/^ARG RCLONE_RELEASE=//p' Dockerfile | head -n1)"
+        echo "rclone_current=$rclone_current" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] rclone_current=$rclone_current"
+        rclone_latest="$(gh release view --repo rclone/rclone --json tagName --jq '.tagName' | sed 's/^v//')"        
+        echo "rclone_latest=$rclone_latest" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] rclone_latest=$rclone_latest"
+        [[ "$rclone_current" != "$rclone_latest" ]] && rclone_changed=true || rclone_changed=false
+        echo "rclone_changed=$rclone_changed" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] rclone_changed=$rclone_changed"
+
+        [[ "$rclone_changed" == "true" || "$cryptomator_changed" == "true" ]] && version_changed=true || version_changed=false
+        echo "version_changed=$version_changed" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] version_changed=$version_changed"
+
+
+    
+    - name: Update Upstream versions
+      if: ${{ steps.versions.outputs.version_changed == 'true' }}
+      run: |
+        set -euo pipefail
+        
+        sed -i -E 's/^(ARG CRYPTOMATOR_CLI_RELEASE=).*/\1${{ steps.versions.outputs.cryptomator_latest }}/' Dockerfile
+        sed -i -E 's/^(ARG CRYPTOMATOR_CLI_RELEASE=).*/\1${{ steps.versions.outputs.cryptomator_latest }}/' debug.sh
+
+        sed -i -E 's/^(ARG RCLONE_RELEASE=).*/\1${{ steps.versions.outputs.rclone_latest }}/' Dockerfile
+        sed -i -E 's/^(ARG RCLONE_RELEASE=).*/\1${{ steps.versions.outputs.rclone_latest }}/' debug.sh
+    
+    - name: Create pull request
+      if: ${{ steps.versions.outputs.version_changed == 'true' }}
+      uses: peter-evans/create-pull-request@v8
+      with:
+        branch: feature/UpstreamReleaseUpdate
+        delete-branch: true
+        title: "Update Upstream Releases"
+        commit-message: "Update upstream release"
+        body: |
+          Updated upstream release versions:  
+          - Cryptomator CLI: `${{ steps.versions.outputs.cryptomator_current }}` to `${{ steps.versions.outputs.cryptomator_latest }}`
+          - Rclone: `${{ steps.versions.outputs.rclone_current }}` to `${{ steps.versions.outputs.rclone_latest }}`
