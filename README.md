@@ -105,7 +105,7 @@ The decrypted mount is intentionally internal. Even if `/vault-decrypted` is bin
 
 ### `/rclone`
 
-Directory for the optional `rclone.conf` is becomes required when `UPSTREAM_ENABLED=true`
+Directory for the optional `rclone.conf`. This volume is required when `UPSTREAM_ENABLED=true`.
 
 ### `/state`
 
