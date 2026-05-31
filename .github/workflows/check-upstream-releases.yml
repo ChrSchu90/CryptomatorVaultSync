@@ -53,8 +53,6 @@ jobs:
         echo "version_changed=$version_changed" >> "$GITHUB_OUTPUT"
         echo "::notice::[info] version_changed=$version_changed"
 
-
-    
     - name: Update Upstream versions
       if: ${{ steps.versions.outputs.version_changed == 'true' }}
       run: |
