@@ -2,13 +2,28 @@
 
 [![Build](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml/badge.svg)](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml)
 
-`Cryptomator Vault Sync` syncs files from a plain source directory into a `Cryptomator` vault. The container unlocks the vault temporarily, copies files into the decrypted vault directory, and Cryptomator stores them encrypted in the vault directory.
+`Cryptomator Vault Sync` syncs files from a plain source directory into a [Cryptomator](https://cryptomator.org) vault. The container unlocks the vault temporarily, copies files into the decrypted vault directory, and Cryptomator stores them encrypted in the vault directory.
 
-Optionally, the encrypted vault can be synced to one or more remote destinations using `rclone`, for example Google Drive, OneDrive, SFTP, or any other rclone-supported backend.
+Optionally, the encrypted vault can be synced to one or more remote destinations using [rclone](https://github.com/rclone/rclone), for example `Google Drive`, `OneDrive`, `SFTP`, or any other [rclone-supported provider](https://rclone.org/#providers).
 
 ```text
 /sync -> /vault-decrypted -> /vault-encrypted -> optional rclone remote(s)
 ```
+
+## 💡 Use case
+
+This project was built for a simple NAS backup scenario:
+
+- Important files are stored on a Synology NAS.
+- These files should be backed up offsite.
+- The offsite backup should be encrypted before it leaves the NAS.
+- The encrypted vault should still be accessible with regular clients, for example from a laptop or phone.
+
+The container writes files into a local Cryptomator vault. The encrypted vault directory can then be synced upstream by the host itself, for example using Synology's built-in Google Drive or OneDrive sync support.
+
+In that setup, `rclone` is not required inside this container, the host handles the upstream sync.
+
+If the host does not provide a cloud sync mechanism, the optional [rclone](https://github.com/rclone/rclone) upstream integration can be enabled as a fallback to sync the encrypted vault to one or more remote destinations (offside or in local network).
 
 ## ⛔ What this project does not do
 
@@ -137,6 +152,7 @@ Use specific version tags for reproducibility. Preview tags are not recommended 
 
 ```bash
 docker run --rm -it \
+  --network none \
   -v /path/to/sync:/sync:ro \
   -v /path/to/vault:/vault-encrypted \
   --cap-add SYS_ADMIN \
@@ -153,6 +169,7 @@ services:
   cryptomator-vault-sync:
     image: ghcr.io/chrschu90/cryptomator-vault-sync:1
     container_name: cryptomator-vault-sync
+    network_mode: none
     cap_add:
       - SYS_ADMIN
     devices:
@@ -163,6 +180,20 @@ services:
       - /path/to/sync:/sync:ro
       - /path/to/vault:/vault-encrypted
 ```
+
+## 🌐 Network mode
+
+### Without rclone
+
+If `UPSTREAM_ENABLED=false`, the container does not need outbound network access during normal operation.
+
+The container only reads from `/sync`, unlocks the local Cryptomator vault, writes encrypted data to `/vault-encrypted`, and exits or waits for the next cycle.
+
+In this mode you can run the container with Docker's network disabled (`network_mode: none` or `--network none`).
+
+### With rclone
+
+If `UPSTREAM_ENABLED=true`, the container needs network access so rclone can reach the configured remote destinations like other machine on local network, `OneDrive` or `Google Drive`. The container needs network access (`network_mode: bridge` or `--network bridge`)
 
 ## ⚡ One-shot mode
 
@@ -208,7 +239,7 @@ This gives rclone a stable, closed encrypted vault state to upload.
 
 The trade-off is that each cycle needs to unlock and mount the vault again. This is slightly less efficient, but safer for remote sync targets.
 
-## 🔗 Mount modes
+## 🔗 Cryptomator mount modes
 
 ### `FUSE`
 
@@ -299,7 +330,7 @@ This is intentional: failed sync cycles should be visible to the container runti
 
 If you want the container to recover automatically from temporary runtime errors, such as network issues during rclone sync, use a Docker restart policy:
 - Use `restart: unless-stopped` for continuous mode.
-- Use `restart: "no"` for one-shot usage with an external scheduler, keep restart: "no" so the scheduler can detect failed runs by the container exit code.
+- Use `restart: no` for one-shot usage with an external scheduler, so the scheduler can detect failed runs by the container exit code.
 
 ## 🏁 Exit codes
 
