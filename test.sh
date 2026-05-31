@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")" || exit 1
 
-IMAGE_NAME="cryptomator-vault-sync:test"
+IMAGE_NAME=cryptomator-vault-sync:test
 VAULT_PASSWORD=cryptomator-vault-sync
 
 log() {
@@ -44,8 +44,6 @@ create_state_dir() {
   mkdir -p ./tests/state
 }
 
-trap cleanup EXIT
-
 docker_cleanup() {
   create_sync_dir
   create_temp_vault
@@ -59,6 +57,14 @@ fix_test_file_permissions() {
     "$IMAGE_NAME" \
     sh -c 'chmod -R a+rwX /tests/rclone-remote /tests/sync /tests/tmp-vault 2>/dev/null || true' \
     >/dev/null 2>&1 || true
+}
+
+docker_run_healthcheck() {
+  docker run --rm \
+    -v "./tests/state:/state" \
+    "$@" \
+    "$IMAGE_NAME" \
+    /healthcheck.sh
 }
 
 docker_run_without_cleanup() {
@@ -85,20 +91,8 @@ docker_run_without_cleanup() {
 
 docker_run() {
   docker_cleanup
-  docker_run_without_cleanup
+  docker_run_without_cleanup "$@"
 }
-
-log "Preparing test directories and files..."
-docker_cleanup
-
-log "TEST: run.sh syntax check"
-bash -n run.sh
-
-log "TEST: healthcheck.sh syntax check"
-bash -n healthcheck.sh
-
-log "Building test image..."
-docker buildx build --load --no-cache -t "$IMAGE_NAME" .
 
 indent_gray_output() {
   sed 's/^/  \x1b[90m│ /; s/$/\x1b[0m/'
@@ -146,6 +140,47 @@ assert_file_contains_status() {
   log "PASSED: $file status is $expected_status"
 }
 
+trap cleanup EXIT
+
+log "Preparing test directories and files..."
+docker_cleanup
+
+log "TEST: run.sh syntax check"
+bash -n run.sh
+
+log "TEST: healthcheck.sh syntax check"
+bash -n healthcheck.sh
+
+log "Building test image..."
+docker buildx build --load --progress=plain --no-cache -t "$IMAGE_NAME" .
+
+log "TEST: Healthcheck one-shot mode"
+docker_cleanup
+assert_exit_code 0 \
+  docker_run_healthcheck \
+    -e SYNC_INTERVAL_MINUTES=0
+
+log "TEST: Healthcheck idle status"
+docker_cleanup
+printf '2026-05-30 22:10:00 idle\n' > ./tests/state/current-status
+assert_exit_code 0 \
+  docker_run_healthcheck \
+    -e SYNC_INTERVAL_MINUTES=1
+
+log "TEST: Healthcheck upstream-error status"
+docker_cleanup
+printf '2026-05-30 22:10:00 upstream-error\n' > ./tests/state/current-status
+assert_exit_code 1 \
+  docker_run_healthcheck \
+    -e SYNC_INTERVAL_MINUTES=1
+
+log "TEST: Healthcheck unknown status"
+docker_cleanup
+printf '2026-05-30 22:10:00 unknown\n' > ./tests/state/current-status
+assert_exit_code 1 \
+  docker_run_healthcheck \
+    -e SYNC_INTERVAL_MINUTES=1
+
 log "TEST: Missing vault password"
 assert_exit_code 2 \
   docker_run
@@ -155,7 +190,7 @@ assert_file_exists ./tests/state/last-error
 log "TEST: Invalid CRYPTOMATOR_MOUNT_MODE"
 assert_exit_code 2 \
   docker_run \
-    -e CRYPTOMATOR_VAULT_PASSWORD=${VAULT_PASSWORD} \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e CRYPTOMATOR_MOUNT_MODE=invalid
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_exists ./tests/state/last-error
@@ -255,6 +290,15 @@ fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
 
+log "TEST: One-shot vault rclone copy with invalid destination"
+assert_exit_code 1 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_DESTINATIONS=invalid:temp-vault
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+
 log "TEST: One-shot vault rclone copy"
 docker_cleanup
 before="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
@@ -270,5 +314,31 @@ if [[ "$before" == "$after" ]]; then
 fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
+
+log "TEST: One-shot vault rclone copy ignores empty destinations"
+docker_cleanup
+before="$(find ./tests/rclone-remote/temp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from empty destination test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_DESTINATIONS=" | remote:temp-vault | "
+after="$(find ./tests/rclone-remote/temp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" == "$after" ]]; then
+  exit_failed "FAILED: Remote did not change after sync with empty destination entries"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: One-shot upstream fail action continue still exits"
+assert_exit_code 1 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_FAIL_ACTION=continue \
+    -e UPSTREAM_DESTINATIONS=invalid:temp-vault
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "All tests passed!"
