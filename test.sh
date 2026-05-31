@@ -20,7 +20,7 @@ exit_failed() {
 }
 
 cleanup() {
-  rm -rf ./tests/rclone-remote ./tests/sync ./tests/tmp-vault
+  rm -rf ./tests/rclone-remote ./tests/sync ./tests/tmp-vault ./tests/state
   docker image rm "$IMAGE_NAME" >/dev/null 2>&1 || true
 }
 
@@ -39,12 +39,18 @@ create_rclone_dir() {
   mkdir -p ./tests/rclone-remote ./tests/rclone-remote/temp-vault
 }
 
+create_state_dir() {
+  rm -rf ./tests/state
+  mkdir -p ./tests/state
+}
+
 trap cleanup EXIT
 
 docker_cleanup() {
   create_sync_dir
   create_temp_vault
   create_rclone_dir
+  create_state_dir
 }
 
 fix_test_file_permissions() {
@@ -63,6 +69,7 @@ docker_run_without_cleanup() {
     -v "./tests/tmp-vault:/vault-encrypted" \
     -v "./tests/rclone:/rclone" \
     -v "./tests/rclone-remote:/rclone-remote" \
+    -v "./tests/state:/state" \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
     --security-opt apparmor:unconfined \
@@ -113,45 +120,85 @@ assert_exit_code() {
   log "PASSED: exit code $actual"
 }
 
+assert_file_exists() {
+  local file="$1"
+
+  if [[ ! -f "$file" ]]; then
+    exit_failed "FAILED: expected file to exist: $file"
+  fi
+
+  log "PASSED: file exists: $file"
+}
+
+assert_file_contains_status() {
+  local file="$1"
+  local expected_status="$2"
+  local actual_status=""
+
+  assert_file_exists "$file"
+
+  actual_status="$(awk 'NF {print $NF; exit}' "$file")"
+
+  if [[ "$actual_status" != "$expected_status" ]]; then
+    exit_failed "FAILED: expected $file status '$expected_status', got '$actual_status'"
+  fi
+
+  log "PASSED: $file status is $expected_status"
+}
+
 log "TEST: Missing vault password"
 assert_exit_code 2 \
   docker_run
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid CRYPTOMATOR_MOUNT_MODE"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD=${VAULT_PASSWORD} \
     -e CRYPTOMATOR_MOUNT_MODE=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid RSYNC_DELETE"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e RSYNC_DELETE=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid SYNC_INTERVAL_MINUTES"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e SYNC_INTERVAL_MINUTES=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid MOUNT_TIMEOUT_SECONDS"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e MOUNT_TIMEOUT_SECONDS=0
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid UPSTREAM_ENABLED"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_ENABLED=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid UPSTREAM_FAIL_ACTION"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_FAIL_ACTION=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid UPSTREAM_DESTINATIONS"
 assert_exit_code 2 \
@@ -159,6 +206,8 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_ENABLED=true \
     -e UPSTREAM_DESTINATIONS=
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid UPSTREAM_CONFIG"
 assert_exit_code 2 \
@@ -167,6 +216,8 @@ assert_exit_code 2 \
     -e UPSTREAM_ENABLED=true \
     -e UPSTREAM_DESTINATIONS=remote:Vault \
     -e UPSTREAM_CONFIG=/rclone/missing.conf
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid UPSTREAM_MODE"
 assert_exit_code 2 \
@@ -176,6 +227,8 @@ assert_exit_code 2 \
     -e UPSTREAM_MODE=invalid \
     -e UPSTREAM_DESTINATIONS=remote:Vault \
     -e UPSTREAM_CONFIG=/rclone/rclone.conf
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid UPSTREAM_START_DELAY_SECONDS"
 assert_exit_code 2 \
@@ -185,6 +238,8 @@ assert_exit_code 2 \
     -e UPSTREAM_DESTINATIONS=remote:Vault \
     -e UPSTREAM_CONFIG=/rclone/rclone.conf \
     -e UPSTREAM_START_DELAY_SECONDS=-1
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: One-shot vault file copy"
 docker_cleanup
@@ -197,6 +252,8 @@ after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | a
 if [[ "$before" == "$after" ]]; then
   exit_failed "FAILED: Vault did not change after sync before=$before after=$after"
 fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
 
 log "TEST: One-shot vault rclone copy"
 docker_cleanup
@@ -211,5 +268,7 @@ after="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum
 if [[ "$before" == "$after" ]]; then
   exit_failed "FAILED: Remote did not change after sync before=$before after=$after"
 fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
 
 log "All tests passed!"
