@@ -69,6 +69,36 @@ For all supported modes in the current architecture, use:
 
 ## 📁 Volumes
 
+A typical host-side setup can look like this:
+```text
+/MyPath/
+       ├── sync/
+       │       ├── Documents/
+       │       ├── Photos/
+       │       └── Important.txt
+       ├── vault/
+       │       ├── vault.cryptomator
+       │       ├── masterkey.cryptomator
+       │       └── d/
+       ├── config/
+       │       ├── vault-password
+       │       ├── rclone.conf
+       │       └── rsync-exclude.txt
+       └── state/
+               ├── current-status
+               ├── last-success
+               └── last-error
+```
+
+These directories are mounted into the container as:
+
+| Host directory | Container path | Required | Description |
+|---|---|---:|---|
+| `/MyPath/sync` | `/sync` | yes | Source files that should be copied into the decrypted vault view. Can be mounted read-only. |
+| `/MyPath/vault` | `/vault-encrypted` | yes | Existing initialized Cryptomator vault. This is the encrypted vault directory. |
+| `/MyPath/config` | `/config` | optional | Optional read-only config directory for files such as `vault-password`, `rclone.conf`, and `rsync-exclude.txt`. |
+| `/MyPath/state` | `/state` | optional | Writable status directory used for `current-status`, `last-success`, and `last-error`. |
+
 ### `/sync`
 
 Source directory containing files that should be copied into the vault.
@@ -103,9 +133,15 @@ The directory must already contain an initialized Cryptomator vault. Create the 
 
 The decrypted mount is intentionally internal. Even if `/vault-decrypted` is bind-mounted to the host, the host usually will not see the decrypted FUSE/WebDAV mount contents because the mount is created inside the container's mount namespace. Since the sync process runs inside the container, exposing `/vault-decrypted` to the host is not required.
 
-### `/rclone`
+### `/config`
 
-Directory for the optional `rclone.conf`. This volume is required when `UPSTREAM_ENABLED=true`.
+Optional configuration directory. It can contain files such as:
+
+```text
+/config/rclone.conf
+/config/vault-password
+/config/rsync-exclude.txt
+```
 
 ### `/state`
 
@@ -154,7 +190,7 @@ Possible `current-status` values:
 | `CRYPTOMATOR_MOUNT_MODE`       | `auto`             | Mount mode: `fuse`, `webdav`, or `auto`                              |
 | `SYNC_DIR`                     | `/sync`            | Source directory inside the container                                |
 | `VAULT_ENCRYPTED_DIR`          | `/vault-encrypted` | Encrypted vault directory inside the container                       |
-| `DRY_RUN`                      | `false`            | If `true`, runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. |
+| `DRY_RUN`                      | `false`            | If `true`, runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. `/state/last-success` is not updated. |
 | `RSYNC_DELETE`                 | `false`            | If `true`, delete files in the vault that no longer exist in `/sync` |
 | `RSYNC_EXCLUDE_FILE`           | empty              | Optional path to an rsync exclude file. When set, it is passed to rsync via `--exclude-from`. |
 | `RSYNC_ARGS`                   | `-rtv --no-owner --no-group --no-perms` | Base rsync arguments                            |
