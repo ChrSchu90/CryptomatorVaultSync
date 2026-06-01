@@ -19,7 +19,7 @@ CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-auto}"
 
 RSYNC_DELETE="${RSYNC_DELETE:-false}"
 RSYNC_EXCLUDE_FILE="${RSYNC_EXCLUDE_FILE:-}"
-RSYNC_ARGS="${RSYNC_ARGS:--rtv --no-owner --no-group --no-perms}"
+RSYNC_ARGS="${RSYNC_ARGS:--rtv --itemize-changes --no-owner --no-group --no-perms}"
 RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
 SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
 
