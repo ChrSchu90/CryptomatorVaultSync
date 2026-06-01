@@ -31,9 +31,7 @@ bin/x64/
 obj/x64/
 /tests/sync/
 /tests/state/
-/tests/tmp-vault/
 /tests/rclone-remote/
-/tests/secrets/
 /tests/config/
 /tests/vault/
 
