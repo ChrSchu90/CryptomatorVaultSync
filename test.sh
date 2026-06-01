@@ -21,13 +21,18 @@ exit_failed() {
 
 cleanup() {
   fix_test_file_permissions 
-  rm -rf ./tests/rclone-remote ./tests/sync ./tests/tmp-vault ./tests/state ./tests/secrets ./tests/config
+  rm -rf ./tests/rclone-remote ./tests/sync ./tests/vault ./tests/state ./tests/config
   docker image rm "$IMAGE_NAME" >/dev/null 2>&1 || true
 }
 
 create_temp_vault() {
-  rm -rf ./tests/tmp-vault
-  cp -r ./tests/test-vault ./tests/tmp-vault
+  rm -rf ./tests/vault
+  cp -r ./tests/test-vault ./tests/vault
+}
+
+create_temp_config() {
+  rm -rf ./tests/config
+  cp -r ./tests/test-config ./tests/config
 }
 
 create_sync_dir() {
@@ -45,30 +50,19 @@ create_state_dir() {
   mkdir -p ./tests/state
 }
 
-create_secrets_dir() {
-  rm -rf ./tests/secrets
-  mkdir -p ./tests/secrets
-}
-
-create_config_dir() {
-  rm -rf ./tests/config
-  mkdir -p ./tests/config
-}
-
 docker_cleanup() {
   create_sync_dir
   create_temp_vault
+  create_temp_config
   create_rclone_dir
   create_state_dir
-  create_secrets_dir
-  create_config_dir
 }
 
 fix_test_file_permissions() {
   docker run --rm \
     -v "./tests:/tests" \
     "$IMAGE_NAME" \
-    sh -c 'chmod -R a+rwX /tests/rclone-remote /tests/sync /tests/tmp-vault 2>/dev/null || true' \
+    sh -c 'chmod -R a+rwX /tests/rclone-remote /tests/sync /tests/vault 2>/dev/null || true' \
     >/dev/null 2>&1 || true
 }
 
@@ -85,11 +79,9 @@ docker_run_without_cleanup() {
   set +e
   docker run --rm \
     -v "./tests/sync:/sync:ro" \
-    -v "./tests/tmp-vault:/vault-encrypted" \
-    -v "./tests/rclone:/rclone" \
+    -v "./tests/vault:/vault-encrypted" \
     -v "./tests/rclone-remote:/rclone-remote" \
     -v "./tests/state:/state" \
-    -v "./tests/secrets:/secrets:ro" \
     -v "./tests/config:/config:ro" \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
@@ -242,28 +234,28 @@ assert_file_contains_text ./tests/state/last-error "CRYPTOMATOR_VAULT_PASSWORD o
 log "TEST: Vault password file missing"
 assert_exit_code 2 \
   docker_run \
-    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/vault-password
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/config/vault-password
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "CRYPTOMATOR_VAULT_PASSWORD_FILE does not exist"
 
 log "TEST: Vault password file empty"
 docker_cleanup
-: > ./tests/secrets/vault-password
+: > ./tests/config/vault-password
 assert_exit_code 2 \
   docker_run_without_cleanup \
-    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/vault-password
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/config/vault-password
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "CRYPTOMATOR_VAULT_PASSWORD_FILE is empty:"
 
 log "TEST: Vault password from file"
 docker_cleanup
-printf '%s\n' "$VAULT_PASSWORD" > ./tests/secrets/vault-password
-before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+printf '%s\n' "$VAULT_PASSWORD" > ./tests/config/vault-password
+before="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 echo "hello from password file test" > ./tests/sync/test-file.txt
 assert_exit_code 0 \
   docker_run_without_cleanup \
-    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/vault-password
-after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/config/vault-password
+after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before" == "$after" ]]; then
   exit_failed "FAILED: Vault did not change after sync using password file"
 fi
@@ -272,14 +264,14 @@ assert_file_exists ./tests/state/last-success
 
 log "TEST: Vault password env takes precedence over password file"
 docker_cleanup
-printf '%s\n' "wrong-password" > ./tests/secrets/vault-password
-before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+printf '%s\n' "wrong-password" > ./tests/config/vault-password
+before="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 echo "hello from password precedence test" > ./tests/sync/test-file.txt
 assert_exit_code 0 \
   docker_run_without_cleanup \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/vault-password
-after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/config/vault-password
+after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before" == "$after" ]]; then
   exit_failed "FAILED: Vault did not change when env password should take precedence"
 fi
@@ -288,13 +280,13 @@ assert_file_exists ./tests/state/last-success
 
 log "TEST: Vault password env ignores missing password file"
 docker_cleanup
-before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+before="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 echo "hello from missing file override test" > ./tests/sync/test-file.txt
 assert_exit_code 0 \
   docker_run_without_cleanup \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/missing-password
-after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/config/missing-password
+after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before" == "$after" ]]; then
   exit_failed "FAILED: Vault did not change when env password should ignore missing password file"
 fi
@@ -372,9 +364,9 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_ENABLED=true \
     -e UPSTREAM_DESTINATIONS=remote:Vault \
-    -e UPSTREAM_CONFIG=/rclone/missing.conf
+    -e UPSTREAM_CONFIG=/config/missing.conf
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_contains_text ./tests/state/last-error "Rclone config does not exist: /rclone/missing.conf"
+assert_file_contains_text ./tests/state/last-error "Rclone config does not exist: /config/missing.conf"
 
 log "TEST: Invalid UPSTREAM_MODE"
 assert_exit_code 2 \
@@ -383,7 +375,7 @@ assert_exit_code 2 \
     -e UPSTREAM_ENABLED=true \
     -e UPSTREAM_MODE=invalid \
     -e UPSTREAM_DESTINATIONS=remote:Vault \
-    -e UPSTREAM_CONFIG=/rclone/rclone.conf
+    -e UPSTREAM_CONFIG=/config/rclone.conf
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "Invalid UPSTREAM_MODE:"
 
@@ -393,7 +385,7 @@ assert_exit_code 2 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_ENABLED=true \
     -e UPSTREAM_DESTINATIONS=remote:Vault \
-    -e UPSTREAM_CONFIG=/rclone/rclone.conf \
+    -e UPSTREAM_CONFIG=/config/rclone.conf \
     -e UPSTREAM_START_DELAY_SECONDS=-1
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "UPSTREAM_START_DELAY_SECONDS must be a non-negative integer"
@@ -408,13 +400,13 @@ assert_file_contains_text ./tests/state/last-error "DRY_RUN must be true or fals
 
 log "TEST: DRY_RUN does not change vault"
 docker_cleanup
-before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+before="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 echo "hello from dry-run test" > ./tests/sync/test-file.txt
 assert_exit_code 0 \
   docker_run_without_cleanup \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e DRY_RUN=true
-after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before" != "$after" ]]; then
   exit_failed "FAILED: Vault changed during DRY_RUN before=$before after=$after"
 fi
@@ -423,7 +415,7 @@ assert_file_not_exists ./tests/state/last-success
 
 log "TEST: DRY_RUN skips upstream sync"
 docker_cleanup
-before_vault="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+before_vault="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 before_remote="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 echo "hello from dry-run upstream test" > ./tests/sync/test-file.txt
 assert_exit_code 0 \
@@ -432,7 +424,7 @@ assert_exit_code 0 \
     -e DRY_RUN=true \
     -e UPSTREAM_ENABLED=true \
     -e UPSTREAM_DESTINATIONS=remote:temp-vault
-after_vault="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+after_vault="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 after_remote="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before_vault" != "$after_vault" ]]; then
   exit_failed "FAILED: Vault changed during DRY_RUN with upstream enabled"
@@ -445,12 +437,12 @@ assert_file_not_exists ./tests/state/last-success
 
 log "TEST: One-shot vault file copy"
 docker_cleanup
-before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+before="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 echo "hello from integration test" > ./tests/sync/test-file.txt
 assert_exit_code 0 \
   docker_run_without_cleanup \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}"
-after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before" == "$after" ]]; then
   exit_failed "FAILED: Vault did not change after sync before=$before after=$after"
 fi
@@ -466,13 +458,13 @@ assert_exit_code 0 \
     -e RSYNC_DELETE=true
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
-before_delete="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+before_delete="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 rm -f ./tests/sync/delete-me.txt
 assert_exit_code 0 \
   docker_run_without_cleanup \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e RSYNC_DELETE=true
-after_delete="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+after_delete="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before_delete" == "$after_delete" ]]; then
   exit_failed "FAILED: Vault did not change after source deletion with RSYNC_DELETE=true"
 fi
@@ -481,23 +473,17 @@ assert_file_exists ./tests/state/last-success
 
 log "TEST: RSYNC_EXCLUDE_FILE excludes files from sync"
 docker_cleanup
-echo "included file" > ./tests/sync/included.txt
-echo "excluded file" > ./tests/sync/excluded.tmp
-assert_exit_code 0 \
-  docker_run_without_cleanup \
-    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}"
-without_exclude_hash="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
-docker_cleanup
-echo "included file" > ./tests/sync/included.txt
-echo "excluded file" > ./tests/sync/excluded.tmp
-printf '*.tmp\n' > ./tests/config/rsync-exclude.txt
+before="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "excluded file 1" > ./tests/sync/excluded1.tmp
+echo "excluded file 2" > ./tests/sync/excluded2.tmp
+echo "excluded file 3" > ./tests/sync/excluded3.tmp
 assert_exit_code 0 \
   docker_run_without_cleanup \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
-with_exclude_hash="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
-if [[ "$without_exclude_hash" == "$with_exclude_hash" ]]; then
-  exit_failed "FAILED: Vault hash did not differ when RSYNC_EXCLUDE_FILE was used"
+after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" != "$after" ]]; then
+  exit_failed "FAILED: Vault changed even though only excluded files were present"
 fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
