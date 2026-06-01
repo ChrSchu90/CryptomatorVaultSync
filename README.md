@@ -1,6 +1,4 @@
-# 🐳 Cryptomator Vault Sync
-
-[![Build](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml/badge.svg)](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml)
+# 🐳 Cryptomator Vault Sync [![Build](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml/badge.svg)](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml)
 
 `Cryptomator Vault Sync` syncs files from a plain source directory into a [Cryptomator](https://cryptomator.org) vault. The container unlocks the vault temporarily, copies files into the decrypted vault directory, and Cryptomator stores them encrypted in the vault directory.
 
