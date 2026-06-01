@@ -20,8 +20,8 @@ exit_failed() {
 }
 
 cleanup() {
-  fix_test_file_permissions
-  rm -rf ./tests/rclone-remote ./tests/sync ./tests/tmp-vault ./tests/state ./tests/secrets
+  fix_test_file_permissions 
+  rm -rf ./tests/rclone-remote ./tests/sync ./tests/tmp-vault ./tests/state ./tests/secrets ./tests/config
   docker image rm "$IMAGE_NAME" >/dev/null 2>&1 || true
 }
 
@@ -50,12 +50,18 @@ create_secrets_dir() {
   mkdir -p ./tests/secrets
 }
 
+create_config_dir() {
+  rm -rf ./tests/config
+  mkdir -p ./tests/config
+}
+
 docker_cleanup() {
   create_sync_dir
   create_temp_vault
   create_rclone_dir
   create_state_dir
   create_secrets_dir
+  create_config_dir
 }
 
 fix_test_file_permissions() {
@@ -84,6 +90,7 @@ docker_run_without_cleanup() {
     -v "./tests/rclone-remote:/rclone-remote" \
     -v "./tests/state:/state" \
     -v "./tests/secrets:/secrets:ro" \
+    -v "./tests/config:/config:ro" \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
     --security-opt apparmor:unconfined \
@@ -310,6 +317,14 @@ assert_exit_code 2 \
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "RSYNC_DELETE must be true or false"
 
+log "TEST: Invalid RSYNC_EXCLUDE_FILE"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e RSYNC_EXCLUDE_FILE=/config/missing-exclude.txt
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_contains_text ./tests/state/last-error "RSYNC_EXCLUDE_FILE does not exist"
+
 log "TEST: Invalid SYNC_INTERVAL_MINUTES"
 assert_exit_code 2 \
   docker_run \
@@ -460,6 +475,29 @@ assert_exit_code 0 \
 after_delete="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before_delete" == "$after_delete" ]]; then
   exit_failed "FAILED: Vault did not change after source deletion with RSYNC_DELETE=true"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: RSYNC_EXCLUDE_FILE excludes files from sync"
+docker_cleanup
+echo "included file" > ./tests/sync/included.txt
+echo "excluded file" > ./tests/sync/excluded.tmp
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}"
+without_exclude_hash="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+docker_cleanup
+echo "included file" > ./tests/sync/included.txt
+echo "excluded file" > ./tests/sync/excluded.tmp
+printf '*.tmp\n' > ./tests/config/rsync-exclude.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
+with_exclude_hash="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$without_exclude_hash" == "$with_exclude_hash" ]]; then
+  exit_failed "FAILED: Vault hash did not differ when RSYNC_EXCLUDE_FILE was used"
 fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success

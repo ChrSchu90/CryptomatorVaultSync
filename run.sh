@@ -18,6 +18,7 @@ VAULT_PASSWORD=""
 CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-auto}"
 
 RSYNC_DELETE="${RSYNC_DELETE:-false}"
+RSYNC_EXCLUDE_FILE="${RSYNC_EXCLUDE_FILE:-}"
 RSYNC_ARGS="${RSYNC_ARGS:--rtv --no-owner --no-group --no-perms}"
 RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
 SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
@@ -26,7 +27,7 @@ UPSTREAM_ENABLED="${UPSTREAM_ENABLED:-false}"
 UPSTREAM_FAIL_ACTION="${UPSTREAM_FAIL_ACTION:-exit}"
 UPSTREAM_MODE="${UPSTREAM_MODE:-sync}"
 UPSTREAM_DESTINATIONS="${UPSTREAM_DESTINATIONS:-}"
-UPSTREAM_CONFIG="${UPSTREAM_CONFIG:-/rclone/rclone.conf}"
+UPSTREAM_CONFIG="${UPSTREAM_CONFIG:-/config/rclone.conf}"
 UPSTREAM_EXTRA_ARGS="${UPSTREAM_EXTRA_ARGS:-}"
 UPSTREAM_START_DELAY_SECONDS="${UPSTREAM_START_DELAY_SECONDS:-0}"
 
@@ -201,11 +202,16 @@ wait_for_mountpoint() {
 
 sync_once() {
   local dry_run_args=()
+  local exclude_args=()
   local delete_args=()
 
   if [[ "$DRY_RUN" == "true" ]]; then
     dry_run_args=(--dry-run)
     log_warn "DRY_RUN enabled. No files will be written to the vault."
+  fi
+
+  if [[ -n "${RSYNC_EXCLUDE_FILE:-}" ]]; then
+    exclude_args=(--exclude-from "$RSYNC_EXCLUDE_FILE")
   fi
 
   if [[ "$RSYNC_DELETE" == "true" ]]; then
@@ -220,7 +226,7 @@ sync_once() {
 
   set +e
   # shellcheck disable=SC2086
-  rsync $RSYNC_ARGS "${dry_run_args[@]}" "${delete_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
+  rsync $RSYNC_ARGS "${dry_run_args[@]}" "${delete_args[@]}" "${exclude_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
   local rsync_exit_code="$?"
   set -e
 
@@ -402,6 +408,16 @@ validate_config() {
 
   if [[ "$RSYNC_DELETE" != "true" && "$RSYNC_DELETE" != "false" ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_DELETE must be true or false"
+  fi
+
+  if [[ -n "${RSYNC_EXCLUDE_FILE:-}" ]]; then
+    if [[ ! -f "$RSYNC_EXCLUDE_FILE" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_EXCLUDE_FILE does not exist: $RSYNC_EXCLUDE_FILE"
+    fi
+  
+    if [[ ! -r "$RSYNC_EXCLUDE_FILE" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_EXCLUDE_FILE is not readable: $RSYNC_EXCLUDE_FILE"
+    fi
   fi
 
   if ! [[ "$SYNC_INTERVAL_MINUTES" =~ ^[0-9]+$ ]]; then
