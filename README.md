@@ -1,33 +1,68 @@
 # 🐳 Cryptomator Vault Sync [![Build](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml/badge.svg)](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml)
 
-`Cryptomator Vault Sync` syncs files from a plain source directory into a [Cryptomator](https://cryptomator.org) vault. The container unlocks the vault temporarily, copies files into the decrypted vault directory, and Cryptomator stores them encrypted in the vault directory.
+A Docker container that syncs files one-way from a source directory into a [Cryptomator](https://cryptomator.org) vault, enabling encrypted storage while keeping the vault accessible with the official Cryptomator app.
 
-Optionally, the encrypted vault can be synced to one or more remote destinations using [rclone](https://github.com/rclone/rclone), for example `Google Drive`, `OneDrive`, `SFTP`, or any other [rclone-supported provider](https://rclone.org/#providers).
+Optionally, the encrypted vault can be synced to one or more upstream destinations with [rclone](https://rclone.org), for example Google Drive, OneDrive, SFTP, or another rclone-supported provider.
 
 ```text
-/sync -> /vault-decrypted -> /vault-encrypted -> optional rclone remote(s)
+📁 /sync
+   ↓ rsync
+🔓 /vault-decrypted
+   ↓ Cryptomator CLI
+🔒 /vault-encrypted
+   ↓ rclone (optional)
+☁️ upstream destination(s)
 ```
+
+## Table of contents
+
+- [💡 Use case](#-use-case)
+- [⛔ What this project does not do](#-what-this-project-does-not-do)
+- [✔️ Features](#-features)
+- [📋 Requirements](#-requirements)
+- [📁 Directory layout and volumes](#-directory-layout-and-volumes)
+  - [`/sync`](#sync)
+  - [`/vault-encrypted`](#vault-encrypted)
+  - [`/vault-decrypted`](#vault-decrypted)
+  - [`/config`](#config)
+  - [`/state`](#state)
+- [⚙️ Configuration](#-configuration)
+- [💻 Docker run](#-docker-run)
+- [🧩 Docker Compose](#-docker-compose)
+- [🌐 Network mode](#-network-mode)
+- [🔄 Sync modes](#-sync-modes)
+  - [One-shot mode](#one-shot-mode)
+  - [Continuous mode](#continuous-mode)
+  - [Dry-run mode](#dry-run-mode)
+- [🔗 Cryptomator mount modes](#-cryptomator-mount-modes)
+- [🚫 Rsync exclude file](#-rsync-exclude-file)
+- [☁️ Rclone upstream sync](#-rclone-upstream-sync)
+- [💚 Healthcheck, state files, and restarts](#-healthcheck-state-files-and-restarts)
+- [🏷️ Image tags](#-image-tags)
+- [🏁 Exit codes](#-exit-codes)
 
 ## 💡 Use case
 
-This project was built for a simple NAS backup scenario:
+This project was built for a NAS backup scenario:
 
-- Important files are stored on a Synology NAS.
+- Important files are stored on a Synology NAS or another host.
 - These files should be backed up offsite.
-- The offsite backup should be encrypted before it leaves the NAS.
-- The encrypted vault should still be accessible with regular clients, for example from a laptop or phone.
+- The offsite backup should be encrypted before it leaves the host.
+- The encrypted vault should still be accessible with regular Cryptomator clients, for example from a laptop or phone.
 
-The container writes files into a local Cryptomator vault. The encrypted vault directory can then be synced upstream by the host itself, for example using Synology's built-in Google Drive or OneDrive sync support.
+A typical Synology setup can look like this:
+
 ```text
 /sync source dirs -> container -> local encrypted vault -> Synology Cloud Sync -> Google Drive/OneDrive
 ```
-In that setup, `rclone` is not required inside this container, the host handles the upstream sync.
 
-If the host does not provide a cloud sync mechanism, the optional [rclone](https://github.com/rclone/rclone) upstream integration can be enabled as a fallback to sync the encrypted vault to one or more remote destinations (offsite or in local network).
+In that setup, rclone is not required inside this container because the host handles the upstream sync.
+
+If the host does not provide a suitable cloud sync mechanism, the optional [rclone upstream sync](#-rclone-upstream-sync) can sync `/vault-encrypted` to one or more remote destinations.
 
 ## ⛔ What this project does not do
 
-This is not a bidirectional sync tool.
+This is **not** a bidirectional sync tool.
 
 Files that already exist inside the Cryptomator vault are not copied back to `/sync`. The sync direction is always:
 
@@ -39,85 +74,99 @@ Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative sour
 
 ## ✔️ Features
 
-- One-way sync from a plain directory into a Cryptomator vault
-- Runs in Docker
-- Supports FUSE mode
-- Supports WebDAV fallback mode using `davfs2`
-- `auto` mode tries FUSE first and falls back to WebDAV
-- Uses `rsync` for file transfer
-- Internal decrypted mount point
+- One-way sync from a plain source directory into a Cryptomator vault
+- Docker-based one-shot or interval-based operation
+- FUSE mount mode
+- WebDAV fallback mode using `davfs2`
+- `auto` mount mode: tries FUSE first, falls back to WebDAV
+- `rsync` based file transfer
+- Optional `RSYNC_DELETE=true`
+- Optional rsync exclude file
+- Optional dry-run mode
+- Optional password file support
+- Optional rclone upstream sync to one or more destinations
+- Internal decrypted vault mount point
 - Clean shutdown and unmount handling
-- Configurable one-shot or interval-based sync
+- Healthcheck and state files for monitoring
 - Simple exit-code behavior
-- Healthcheck
-- Optional `/state` volume for monitoring files
-- Optional `rclone` to remote destinations
-- Optional read vault password from file
-- Optional exclude file for `rsync`
-- Dry-run simulation to test what would be synced from `/sync` to `/vault-decrypted`. No files are written to the vault or upstream destinations.
 
 ## 📋 Requirements
 
-The container needs permission to create FUSE mounts.
+The container needs permission to create FUSE or WebDAV mounts inside the container.
 
-For all supported modes in the current architecture, use:
+For the current architecture, use:
 
-- `--device /dev/fuse:/dev/fuse` gives the container access to the host FUSE device.
-- `--cap-add SYS_ADMIN` allows mount operations inside the container.
-- `--security-opt apparmor:unconfined` avoids AppArmor blocking FUSE or mount operations on hosts where this is required.
+```yaml
+cap_add:
+  - SYS_ADMIN
+devices:
+  - /dev/fuse:/dev/fuse
+security_opt:
+  - apparmor:unconfined
+```
 
 `apparmor:unconfined` may not be needed on every host. If your setup works without it, you can omit it.
 
-## 📁 Volumes
+## 📁 Directory layout and volumes
 
 A typical host-side setup can look like this:
+
 ```text
-/MyPath/
-       ├── sync/
-       │       ├── Documents/
-       │       ├── Photos/
-       │       └── Important.txt
-       ├── vault/
-       │       ├── vault.cryptomator
-       │       ├── masterkey.cryptomator
-       │       └── d/
-       ├── config/
-       │       ├── vault-password
-       │       ├── rclone.conf
-       │       └── rsync-exclude.txt
-       └── state/
-               ├── current-status
-               ├── last-success
-               └── last-error
+/docker/cryptomator-vault-sync/
+├── sync/
+│   ├── Documents/
+│   ├── Photos/
+│   └── Important.txt
+├── vault/
+│   ├── vault.cryptomator
+│   ├── masterkey.cryptomator
+│   └── d/
+├── config/
+│   ├── vault-password
+│   ├── rclone.conf
+│   └── rsync-exclude.txt
+└── state/
+    ├── current-status
+    ├── last-success
+    └── last-error
 ```
 
 These directories are mounted into the container as:
 
-| Host directory | Container path | Required | Description |
-|---|---|---:|---|
-| `/MyPath/sync` | `/sync` | yes | Source files that should be copied into the decrypted vault view. Can be mounted read-only. |
-| `/MyPath/vault` | `/vault-encrypted` | yes | Existing initialized Cryptomator vault. This is the encrypted vault directory. |
-| `/MyPath/config` | `/config` | optional | Optional read-only config directory for files such as `vault-password`, `rclone.conf`, and `rsync-exclude.txt`. |
-| `/MyPath/state` | `/state` | optional | Writable status directory used for `current-status`, `last-success`, and `last-error`. |
+| Host directory | Container path | Required | Recommended mode | Description |
+|---|---|---:|---|---|
+| `./sync` | `/sync` | yes | read-only | Source files that should be copied into the decrypted vault view. |
+| `./vault` | `/vault-encrypted` | yes | read-write | Existing initialized Cryptomator vault. |
+| `./config` | `/config` | optional | read-only | Optional config files such as `vault-password`, `rclone.conf`, and `rsync-exclude.txt`. |
+| `./state` | `/state` | optional | read-write | Status files used by the healthcheck and external monitoring. |
+
+Example volume mapping:
+
+```yaml
+volumes:
+  - /docker/cryptomator-vault-sync/sync:/sync:ro
+  - /docker/cryptomator-vault-sync/vault:/vault-encrypted
+  - /docker/cryptomator-vault-sync/config:/config:ro
+  - /docker/cryptomator-vault-sync/state:/state
+```
 
 ### `/sync`
 
 Source directory containing files that should be copied into the vault.
 
-> [!TIP]
-> Recommended mount mode: read-only, since it is a one-way sync
+Recommended mount mode: read-only.
 
 ```bash
 -v /path/to/sync:/sync:ro
 ```
 
-You can also mount multiple source directories as subdirectories below `/sync`. All files below `/sync` will be one-way-synced into the vault while preserving the subdirectory structure.
+You can also mount multiple host directories below `/sync`. All files below `/sync` will be one-way synced into the vault while preserving the subdirectory structure.
 
-Example:
-```bash
--v /path/to/sync1:/sync/dir1:ro \
--v /path/to/sync2:/sync/dir2:ro \
--v /path/to/sync3:/sync/dir3:ro
+```yaml
+volumes:
+  - /path/to/dir1:/sync/dir1:ro
+  - /path/to/dir2:/sync/dir2:ro
+  - /path/to/dir3:/sync/dir3:ro
 ```
 
 ### `/vault-encrypted`
@@ -132,34 +181,44 @@ The directory must already contain an initialized Cryptomator vault. Create the 
 
 ### `/vault-decrypted`
 
-The decrypted mount is intentionally internal. Even if `/vault-decrypted` is bind-mounted to the host, the host usually will not see the decrypted FUSE/WebDAV mount contents because the mount is created inside the container's mount namespace. Since the sync process runs inside the container, exposing `/vault-decrypted` to the host is not required.
+Internal temporary mount point used by the container.
+
+Do **not** mount this directory from the host. Even if `/vault-decrypted` is bind-mounted, the host usually will not see the decrypted FUSE/WebDAV mount contents because the mount is created inside the container's mount namespace.
 
 ### `/config`
 
-Optional configuration directory. It can contain files such as:
+Optional read-only configuration directory.
+
+It can contain:
 
 ```text
-/config/rclone.conf
 /config/vault-password
+/config/rclone.conf
 /config/rsync-exclude.txt
+```
+
+Common environment variables pointing into `/config` are:
+
+```env
+CRYPTOMATOR_VAULT_PASSWORD_FILE=/config/vault-password
+UPSTREAM_CONFIG=/config/rclone.conf
+RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
 ```
 
 ### `/state`
 
-Is a **optional** volumen where the container writes a small set of status files. Those files can be used for e.g. external monitoring systems.
+Optional writable state directory for status files.
 
-In one-shot mode (`SYNC_INTERVAL_MINUTES=0`), the container exits after the sync cycle and the container *exit code* is the primary status signal.
+The container writes three files:
 
-In continuous mode, the Docker healthcheck reads `/state/current-status` to determine the current health state.
-
-The state directory contains three files:
-| File             | Description                                                           |
-| ---------------- | --------------------------------------------------------------------- |
+| File | Description |
+|---|---|
 | `current-status` | Current container status. Used by the healthcheck in continuous mode. |
-| `last-success`   | Timestamp of the last fully successful sync cycle.                    |
-| `last-error`     | Timestamp and message of the last error.                              |
+| `last-success` | Timestamp of the last fully successful real sync cycle. Not updated during dry-run mode. |
+| `last-error` | Timestamp and message of the last error. |
 
 Example:
+
 ```text
 /state/current-status
 2026-05-30 22:10:00 idle
@@ -168,66 +227,56 @@ Example:
 2026-05-30 22:10:00
 
 /state/last-error
-2026-05-30 22:05:00 rclone failed for destination 'gdrive:Vault' with exit code 1
+2026-05-30 22:05:00 Rclone failed for destination 'gdrive:Vault' with exit code 1
 ```
 
 Possible `current-status` values:
-| Status           | Meaning                                                                                 |
-| ---------------- | --------------------------------------------------------------------------------------- |
-| `starting`       | Container has started and is validating configuration.                                  |
-| `running`        | A sync cycle is currently running.                                                      |
-| `idle`           | Last sync cycle completed successfully and the container is waiting for the next cycle. |
-| `upstream-error` | The local vault sync completed, but the optional upstream sync failed.                  |
-| `failed`         | The container hit a fatal error and is exiting.                                         |
-| `stopped`        | The container stopped cleanly.                                                          |
 
+| Status | Meaning |
+|---|---|
+| `starting` | Container has started and is validating configuration. |
+| `running` | A sync cycle is currently running. |
+| `idle` | Last sync cycle completed successfully and the container is waiting for the next cycle. |
+| `upstream-error` | Local vault sync completed, but optional upstream sync failed. |
+| `failed` | The container hit a fatal error and is exiting. |
+| `stopped` | The container stopped cleanly. |
 
-## ⚙️ Environment variables
+## ⚙️ Configuration
 
-| Variable                       | Default            | Description                                                          |
-|--------------------------------|-------------------:|----------------------------------------------------------------------|
-| `CRYPTOMATOR_VAULT_PASSWORD`   | required if no password file is used               | Password for the Cryptomator vault. If both password variables are set, this value takes precedence. |
+| Variable | Default | Description |
+|---|---:|---|
+| `CRYPTOMATOR_VAULT_PASSWORD` | required if no password file is used | Password for the Cryptomator vault. If both password variables are set, this value takes precedence. |
 | `CRYPTOMATOR_VAULT_PASSWORD_FILE` | unset | Full path to a file containing the Cryptomator vault password. Used only when `CRYPTOMATOR_VAULT_PASSWORD` is not set. |
-| `CRYPTOMATOR_MOUNT_MODE`       | `auto`             | Mount mode: `fuse`, `webdav`, or `auto`                              |
-| `SYNC_DIR`                     | `/sync`            | Source directory inside the container                                |
-| `VAULT_ENCRYPTED_DIR`          | `/vault-encrypted` | Encrypted vault directory inside the container                       |
-| `DRY_RUN`                      | `false`            | If `true`, runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. `/state/last-success` is not updated. |
-| `RSYNC_DELETE`                 | `false`            | If `true`, delete files in the vault that no longer exist in `/sync` |
-| `RSYNC_EXCLUDE_FILE`           | empty              | Optional path to an rsync exclude file. When set, it is passed to rsync via `--exclude-from`. |
-| `RSYNC_ARGS`                   | `-rtv --no-owner --no-group --no-perms` | Base rsync arguments                            |
-| `RSYNC_EXTRA_ARGS`             | empty              | Additional rsync arguments                                           |
-| `MOUNT_TIMEOUT_SECONDS`        | `60`               | Timeout for mount operations                                         |
-| `SYNC_INTERVAL_MINUTES`        | `0`                | `0` means one-shot mode; any positive value enables continuous sync  |
-| `UPSTREAM_ENABLED`             | `false`            | Enable optional rclone upload/sync after the encrypted vault has been updated |
-| `UPSTREAM_FAIL_ACTION`         | `exit`             | Behavior when rclone fails. `exit` stops the container with exit code; `continue` logs the error and retries on the next cycle in continuous mode. **One-shot mode always exits on upstream errors.** |
-| `UPSTREAM_MODE`                | `sync`             | rclone operation mode. Supported values: `sync` and `copy`. `sync` mirrors the encrypted vault to the destination, including deletions. `copy` uploads new/changed files without deleting remote files. |
-| `UPSTREAM_DESTINATIONS`        | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault`   |
-| `UPSTREAM_CONFIG`              | `/config/rclone.conf` | Path to the rclone configuration file inside the container        |
-| `UPSTREAM_EXTRA_ARGS`          | empty              | Additional arguments passed to rclone                                |
-| `UPSTREAM_START_DELAY_SECONDS` | `0`                | Optional delay between rsync (`sync` -> `vault`) and rclone (`vault` -> `remote`) |
-
-## 🏷️ Image Labels
-
-This image follows semantic versioning.
-Use specific version tags for reproducibility. Preview tags are not recommended for production.
-
-- `latest` – Most recent stable release
-- `1` – Latest stable release in major version `1`
-- `1.2` – Latest stable release in minor version `1.2`
-- `1.2.3` – Specific stable patch version (fully pinned)
-- `preview` – Latest preview build
-- `1-preview` – Latest preview for major version `1`
-- `1.2-preview` – Latest preview for minor version `1.2`
-- `1.2.3-preview` – Latest preview for patch version `1.2.3`
-- `1.2.3-beta.1` – Specific preview build (fully pinned)
+| `CRYPTOMATOR_MOUNT_MODE` | `auto` | Mount mode: `fuse`, `webdav`, or `auto`. See [Cryptomator mount modes](#-cryptomator-mount-modes). |
+| `DRY_RUN` | `false` | Runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. `/state/last-success` is not updated. |
+| `SYNC_DIR` | `/sync` | Source directory inside the container. |
+| `VAULT_ENCRYPTED_DIR` | `/vault-encrypted` | Encrypted vault directory inside the container. |
+| `STATE_DIR` | `/state` | Directory for state files. |
+| `RSYNC_DELETE` | `false` | If `true`, delete files in the vault that no longer exist in `/sync`. |
+| `RSYNC_EXCLUDE_FILE` | empty | Optional path to an rsync exclude file. See [Rsync exclude file](#-rsync-exclude-file). |
+| `RSYNC_ARGS` | `-rtv --no-owner --no-group --no-perms` | Base rsync arguments. |
+| `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |
+| `MOUNT_TIMEOUT_SECONDS` | `60` | Timeout for mount operations. |
+| `SYNC_INTERVAL_MINUTES` | `0` | `0` enables one-shot mode. Any positive value enables continuous mode. |
+| `UPSTREAM_ENABLED` | `false` | Enable optional rclone upstream sync after the encrypted vault has been updated. |
+| `UPSTREAM_FAIL_ACTION` | `exit` | Behavior when rclone fails. `exit` stops the container; `continue` keeps continuous mode running and retries on the next cycle. One-shot mode always exits on upstream errors. |
+| `UPSTREAM_MODE` | `sync` | rclone mode: `sync` or `copy`. |
+| `UPSTREAM_DESTINATIONS` | empty | One or more rclone destination paths separated by `|`, for example `onedrive:Vault|gdrive:Vault`. |
+| `UPSTREAM_CONFIG` | `/config/rclone.conf` | Path to the rclone configuration file. |
+| `UPSTREAM_EXTRA_ARGS` | empty | Additional arguments passed to rclone. |
+| `UPSTREAM_START_DELAY_SECONDS` | `0` | Optional delay after unmounting the vault before running rclone. |
 
 ## 💻 Docker run
+
+Minimal one-shot example without rclone:
 
 ```bash
 docker run --rm -it \
   --network none \
+  -e CRYPTOMATOR_VAULT_PASSWORD='MyVaultPassword' \
   -v /path/to/sync:/sync:ro \
   -v /path/to/vault:/vault-encrypted \
+  -v /path/to/state:/state \
   --cap-add SYS_ADMIN \
   --device /dev/fuse:/dev/fuse \
   --security-opt apparmor:unconfined \
@@ -236,7 +285,8 @@ docker run --rm -it \
 
 ## 🧩 Docker Compose
 
-See: [full example](example/docker-compose.yml)
+See the full example: [`example/docker-compose.yml`](example/docker-compose.yml)
+
 ```yaml
 services:
   cryptomator-vault-sync:
@@ -249,9 +299,15 @@ services:
       - /dev/fuse:/dev/fuse
     security_opt:
       - apparmor:unconfined
+    environment:
+      CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password
+      SYNC_INTERVAL_MINUTES: 0
+      UPSTREAM_ENABLED: false
     volumes:
       - /path/to/sync:/sync:ro
       - /path/to/vault:/vault-encrypted
+      - /path/to/config:/config:ro
+      - /path/to/state:/state
 ```
 
 ## 🌐 Network mode
@@ -260,17 +316,29 @@ services:
 
 If `UPSTREAM_ENABLED=false`, the container does not need outbound network access during normal operation.
 
-The container only reads from `/sync`, unlocks the local Cryptomator vault, writes encrypted data to `/vault-encrypted`, and exits or waits for the next cycle.
+In this mode you can disable networking:
 
-In this mode you can run the container with Docker's network disabled (`network_mode: none` or `--network none`).
+```yaml
+network_mode: none
+```
+
+or:
+
+```bash
+--network none
+```
 
 ### With rclone
 
-If `UPSTREAM_ENABLED=true`, the container needs network access so rclone can reach the configured remote destinations like other machine on local network, `OneDrive` or `Google Drive`. The container needs network access (`network_mode: bridge` or `--network bridge`)
+If `UPSTREAM_ENABLED=true`, the container needs network access so rclone can reach the configured destination, for example another machine in the local network, Google Drive, or OneDrive.
 
-## ⚡ One-shot mode
+Use Docker's default bridge network or omit `network_mode`.
 
-Set a 0 interval:
+## 🔄 Sync modes
+
+### One-shot mode
+
+Set:
 
 ```env
 SYNC_INTERVAL_MINUTES=0
@@ -278,43 +346,55 @@ SYNC_INTERVAL_MINUTES=0
 
 The container will:
 
-1. Unlock the vault
-2. Sync files from `/sync` into the decrypted vault view
-3. Unmount the vault
-4. Optionally run rclone against `/vault-encrypted`
-5. Exit
+1. Unlock the vault.
+2. Sync files from `/sync` into the decrypted vault view.
+3. Unmount the vault.
+4. Optionally run rclone against `/vault-encrypted`.
+5. Exit.
 
-Use a scheduler for one-shot runs if you do not want the vault to remain unlocked continuously.
+Use this mode with an external scheduler such as cron or Synology Task Scheduler.
 
-## 🔄 Continuous mode
+### Continuous mode
 
 Set a positive interval:
 
 ```env
 SYNC_INTERVAL_MINUTES=5
 ```
-`SYNC_INTERVAL_MINUTES` defines the delay between completed sync cycles, not a fixed time like cron.
 
-The container will run a full sync cycle every 5 minutes. Each cycle the container will:
+`SYNC_INTERVAL_MINUTES` defines the delay between completed sync cycles, not a fixed cron-like schedule.
 
-1. Unlock the vault
-2. Sync files from `/sync` into the decrypted vault view
-3. Unmount the vault
-4. Optionally run rclone against `/vault-encrypted`
-5. Wait until next cycle
+Each cycle will:
 
-In continuous mode, the container does not keep the decrypted vault mounted between sync cycles.
+1. Unlock the vault.
+2. Sync files from `/sync` into the decrypted vault view.
+3. Unmount the vault.
+4. Optionally run rclone against `/vault-encrypted`.
+5. Wait until the next cycle.
 
-This is intentional. The optional rclone step syncs the encrypted vault directory `/vault-encrypted` to one or more remote destinations. To avoid syncing the vault while Cryptomator is still writing to it, the decrypted vault is unmounted before rclone starts. 
-This is also useful when `/vault-encrypted` is bind-mounted to a host directory that is synced upstream by the host itself, for example by Synology Drive, Google Drive, OneDrive, or another backup/sync tool. By unmounting the decrypted vault before the upstream sync starts, the host-side sync tool is more likely to see a stable encrypted vault state instead of files that Cryptomator is still updating.
+The decrypted vault is not kept mounted between cycles. This is intentional: rclone or host-side sync tools should see a stable, closed encrypted vault state instead of files that Cryptomator is still updating.
 
-This gives rclone a stable, closed encrypted vault state to upload.
+### Dry-run mode
 
-The trade-off is that each cycle needs to unlock and mount the vault again. This is slightly less efficient, but safer for remote sync targets.
+Set:
+
+```env
+DRY_RUN=true
+```
+
+Dry-run mode:
+
+- unlocks and mounts the vault normally,
+- runs rsync with `--dry-run`,
+- does not write files to the vault,
+- skips rclone/upstream sync,
+- does not update `/state/last-success`.
+
+This is useful for checking what rsync would copy or delete before enabling a real sync, especially when using `RSYNC_DELETE=true`.
 
 ## 🔗 Cryptomator mount modes
 
-### `FUSE`
+### `fuse`
 
 Uses Cryptomator CLI's Linux FUSE mount provider.
 
@@ -322,16 +402,17 @@ Uses Cryptomator CLI's Linux FUSE mount provider.
 CRYPTOMATOR_MOUNT_MODE=fuse
 ```
 
-> [!IMPORTANT]
-> #### Test `FUSE` availability
-> `FUSE` is much better than the `WebDAV` fallback, to test its availability run the following command on the host:
-> ```bash
-> ls -l /dev/fuse
-> ```
-> A typical successful result looks like:
-> ```text
-> crw-rw-rw- 1 root users 10, 229 ... /dev/fuse
-> ```
+To check FUSE availability on the host:
+
+```bash
+ls -l /dev/fuse
+```
+
+A typical successful result looks like:
+
+```text
+crw-rw-rw- 1 root users 10, 229 ... /dev/fuse
+```
 
 ### `webdav`
 
@@ -351,64 +432,150 @@ CRYPTOMATOR_MOUNT_MODE=auto
 
 This is the default.
 
-## ☁️ Rclone
+## 🚫 Rsync exclude file
 
-To create an rclone config, run the interactive rclone config command:
+You can exclude files or directories from the local sync with an rsync exclude file:
+
+```env
+RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
+```
+
+Example exclude file:
+
+```text
+@eaDir/
+#recycle/
+.DS_Store
+Thumbs.db
+*.tmp
+~$*
+```
+
+The file is passed to rsync via `--exclude-from`.
+
+Patterns are interpreted relative to the `/sync` source directory. For example:
+
+```text
+/cache/
+```
+
+excludes only `/sync/cache/`, while:
+
+```text
+cache/
+```
+
+excludes directories named `cache` anywhere below `/sync`.
+
+## ☁️ Rclone upstream sync
+
+rclone is optional. Enable it only when the container itself should upload or copy the encrypted vault to one or more upstream destinations.
+
+```env
+UPSTREAM_ENABLED=true
+UPSTREAM_DESTINATIONS=gdrive:CryptomatorVault
+UPSTREAM_CONFIG=/config/rclone.conf
+```
+
+Create an rclone config interactively:
+
 ```bash
 docker run --rm -it \
   -v /path/to/config:/config \
   rclone/rclone config --config /config/rclone.conf
 ```
 
-After the config has been created, set `UPSTREAM_DESTINATIONS` to one or more remote paths you want to sync to, for example:
-```env
-UPSTREAM_DESTINATIONS=gdrive:CryptomatorVault
+The remote name is the section name in `rclone.conf`:
+
+```text
+[gdrive] # <-- remote name
+ type = drive
+ token = ...
+
+[onedrive]
+ type = onedrive
+ token = ...
 ```
-or with multiple upstreams
+
+Multiple destinations are separated by `|`:
+
 ```env
 UPSTREAM_DESTINATIONS=gdrive:CryptomatorVault|onedrive:CryptomatorVault
 ```
 
-Multiple destinations are separated by `|`. Spaces around `|` are ignored. Avoid using `|` in remote folder names.
+Spaces around `|` are ignored. Avoid using `|` in remote folder names.
 
-The remote name is the section name in rclone.conf:
-```text
-[gdrive] # <-- This is the remote name
-type = drive
-scope = drive
-token = ...
+If your vault should be placed inside a subdirectory of the remote, for example:
 
-[onedrive]
-type = onedrive
-token = ...
-```
-
-If your vault should be placed inside a subdirectory of the remote, for example Google Drive:
 ```text
 Root/
 └── Vaults/
-        └── Backup Vault/
+    └── Backup Vault/
 ```
 
-set `UPSTREAM_DESTINATIONS` to:
+set:
+
 ```env
 UPSTREAM_DESTINATIONS=gdrive:Vaults/Backup Vault
 ```
 
-## 💥 Error handling and restarts
+### `sync` vs `copy`
 
-The container exits on configuration errors, mount errors, rsync errors, and upstream errors, unless configured otherwise.
+```env
+UPSTREAM_MODE=sync
+```
 
-This is intentional: failed sync cycles should be visible to the container runtime, schedulers, or monitoring tools.
+Mirrors `/vault-encrypted` to the destination, including deletions.
 
-If you want the container to recover automatically from temporary runtime errors, such as network issues during rclone sync, use a Docker restart policy:
-- Use `restart: unless-stopped` for continuous mode.
-- Use `restart: no` for one-shot usage with an external scheduler, so the scheduler can detect failed runs by the container exit code.
+```env
+UPSTREAM_MODE=copy
+```
+
+Uploads new and changed files without deleting remote files.
+
+## 💚 Healthcheck, state files, and restarts
+
+In one-shot mode, the container exits after one sync cycle. The container exit code is the primary status signal.
+
+In continuous mode, Docker runs `/healthcheck.sh`. The healthcheck reads `/state/current-status`:
+
+- `starting`, `running`, `idle`, and `stopped` are healthy states.
+- unknown states, `failed`, and `upstream-error` are unhealthy states.
+
+Docker's `HEALTHCHECK --retries=3` means the container is only marked unhealthy after repeated failing checks. Once a later cycle succeeds and writes `idle`, the container becomes healthy again.
+
+Recommended restart policies:
+
+| Mode | Restart policy | Reason |
+|---|---|---|
+| One-shot with external scheduler | `restart: no` | The scheduler should see the container exit code. |
+| Continuous mode | `restart: unless-stopped` | Docker can restart the container after fatal runtime errors. |
+
+If `UPSTREAM_FAIL_ACTION=continue` is set in continuous mode, upstream errors do not stop the container. Instead, the container writes `upstream-error` to `/state/current-status`, writes the error to `/state/last-error`, and retries during the next sync cycle.
+
+## 🏷️ Image tags
+
+This image follows semantic versioning. Use specific version tags for reproducibility.
+
+Stable tags:
+
+- `latest` – most recent stable release
+- `1` – latest stable release in major version `1`
+- `1.2` – latest stable release in minor version `1.2`
+- `1.2.3` – specific stable patch version
+
+Preview tags are not recommended for production:
+
+- `preview`
+- `1-preview`
+- `1.2-preview`
+- `1.2.3-preview`
+- `1.2.3-beta.1`
 
 ## 🏁 Exit codes
 
 | Exit code | Meaning |
-|----:|----------------------------------------------------|
-| `0` | Success or clean stop via `CTRL+C` / `docker stop` |
-| `1` | Runtime error, mount error, or sync error          |
-| `2` | Invalid configuration                              |
+|---:|---|
+| `0` | Success or clean stop via `CTRL+C` / `docker stop`. |
+| `1` | Runtime error, mount error, rsync error, or upstream error. |
+| `2` | Invalid configuration. |
