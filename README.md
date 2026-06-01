@@ -53,6 +53,7 @@ Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative sour
 - Optional `/state` volume for monitoring files
 - Optional `rclone` to remote destinations
 - Optional read vault password from file
+- Optional exclude file for `rsync`
 - Dry-run simulation to test what would be synced from `/sync` to `/vault-decrypted`. No files are written to the vault or upstream destinations.
 
 ## 📋 Requirements
