@@ -13,7 +13,7 @@ services:
       - apparmor:unconfined                                  # Required
     environment:
       CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"             # Required
-      CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password   # Optional replacement for CRYPTOMATOR_VAULT_PASSWORD
+      #CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password  # Optional replacement for CRYPTOMATOR_VAULT_PASSWORD
       SYNC_DIR: /sync                                           # Optional [default=/sync]
       VAULT_ENCRYPTED_DIR: /vault-encrypted                     # Optional [default=/vault-encrypted]
       CRYPTOMATOR_MOUNT_MODE: auto                              # Optional [default=auto] fuse, webdav, auto
