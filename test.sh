@@ -21,7 +21,7 @@ exit_failed() {
 
 cleanup() {
   fix_test_file_permissions
-  rm -rf ./tests/rclone-remote ./tests/sync ./tests/tmp-vault ./tests/state
+  rm -rf ./tests/rclone-remote ./tests/sync ./tests/tmp-vault ./tests/state ./tests/secrets
   docker image rm "$IMAGE_NAME" >/dev/null 2>&1 || true
 }
 
@@ -45,11 +45,17 @@ create_state_dir() {
   mkdir -p ./tests/state
 }
 
+create_secrets_dir() {
+  rm -rf ./tests/secrets
+  mkdir -p ./tests/secrets
+}
+
 docker_cleanup() {
   create_sync_dir
   create_temp_vault
   create_rclone_dir
   create_state_dir
+  create_secrets_dir
 }
 
 fix_test_file_permissions() {
@@ -77,6 +83,7 @@ docker_run_without_cleanup() {
     -v "./tests/rclone:/rclone" \
     -v "./tests/rclone-remote:/rclone-remote" \
     -v "./tests/state:/state" \
+    -v "./tests/secrets:/secrets:ro" \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
     --security-opt apparmor:unconfined \
@@ -213,7 +220,69 @@ log "TEST: Missing vault password"
 assert_exit_code 2 \
   docker_run
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_contains_text ./tests/state/last-error "CRYPTOMATOR_VAULT_PASSWORD is required"
+assert_file_contains_text ./tests/state/last-error "CRYPTOMATOR_VAULT_PASSWORD or CRYPTOMATOR_VAULT_PASSWORD_FILE is required"
+
+log "TEST: Vault password file missing"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/vault-password
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_contains_text ./tests/state/last-error "CRYPTOMATOR_VAULT_PASSWORD_FILE does not exist"
+
+log "TEST: Vault password file empty"
+docker_cleanup
+: > ./tests/secrets/vault-password
+assert_exit_code 2 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/vault-password
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_contains_text ./tests/state/last-error "CRYPTOMATOR_VAULT_PASSWORD_FILE is empty:"
+
+log "TEST: Vault password from file"
+docker_cleanup
+printf '%s\n' "$VAULT_PASSWORD" > ./tests/secrets/vault-password
+before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from password file test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/vault-password
+after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" == "$after" ]]; then
+  exit_failed "FAILED: Vault did not change after sync using password file"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: Vault password env takes precedence over password file"
+docker_cleanup
+printf '%s\n' "wrong-password" > ./tests/secrets/vault-password
+before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from password precedence test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/vault-password
+after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" == "$after" ]]; then
+  exit_failed "FAILED: Vault did not change when env password should take precedence"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: Vault password env ignores missing password file"
+docker_cleanup
+before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from missing file override test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e CRYPTOMATOR_VAULT_PASSWORD_FILE=/secrets/missing-password
+after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" == "$after" ]]; then
+  exit_failed "FAILED: Vault did not change when env password should ignore missing password file"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
 
 log "TEST: Invalid CRYPTOMATOR_MOUNT_MODE"
 assert_exit_code 2 \

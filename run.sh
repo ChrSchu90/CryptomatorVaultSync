@@ -351,8 +351,22 @@ validate_config() {
   require_cryptomator_vault "$VAULT_ENCRYPTED_DIR"
   require_empty_mountpoint
 
-  if [[ -z "${CRYPTOMATOR_VAULT_PASSWORD:-}" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD is required"
+  if [[ -z "${CRYPTOMATOR_VAULT_PASSWORD:-}" && -z "${CRYPTOMATOR_VAULT_PASSWORD_FILE:-}" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD or CRYPTOMATOR_VAULT_PASSWORD_FILE is required"
+  fi
+  
+  if [[ -z "${CRYPTOMATOR_VAULT_PASSWORD:-}" && -n "${CRYPTOMATOR_VAULT_PASSWORD_FILE:-}" ]]; then
+    if [[ ! -f "$CRYPTOMATOR_VAULT_PASSWORD_FILE" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD_FILE does not exist: $CRYPTOMATOR_VAULT_PASSWORD_FILE"
+    fi
+  
+    if [[ ! -r "$CRYPTOMATOR_VAULT_PASSWORD_FILE" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD_FILE is not readable: $CRYPTOMATOR_VAULT_PASSWORD_FILE"
+    fi
+  
+    if [[ ! -s "$CRYPTOMATOR_VAULT_PASSWORD_FILE" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD_FILE is empty: $CRYPTOMATOR_VAULT_PASSWORD_FILE"
+    fi
   fi
 
   case "$CRYPTOMATOR_MOUNT_MODE" in
@@ -411,8 +425,19 @@ validate_config() {
 }
 
 load_password() {
-  VAULT_PASSWORD="$CRYPTOMATOR_VAULT_PASSWORD"
-  unset CRYPTOMATOR_VAULT_PASSWORD
+  if [[ -n "${CRYPTOMATOR_VAULT_PASSWORD:-}" ]]; then
+    VAULT_PASSWORD="$CRYPTOMATOR_VAULT_PASSWORD"
+    unset CRYPTOMATOR_VAULT_PASSWORD
+    unset CRYPTOMATOR_VAULT_PASSWORD_FILE
+    return 0
+  fi
+
+  VAULT_PASSWORD="$(cat "$CRYPTOMATOR_VAULT_PASSWORD_FILE")"
+  unset CRYPTOMATOR_VAULT_PASSWORD_FILE
+
+  if [[ -z "$VAULT_PASSWORD" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "Vault password is empty"
+  fi
 }
 
 mount_vault() {

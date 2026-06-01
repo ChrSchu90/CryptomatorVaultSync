@@ -52,6 +52,7 @@ Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative sour
 - Healthcheck
 - Optional `/state` volume for monitoring files
 - Optional `rclone` to remote destinations
+- Optional read vault password from file
 
 ## 📋 Requirements
 
@@ -147,7 +148,8 @@ Possible `current-status` values:
 
 | Variable                       | Default            | Description                                                          |
 |--------------------------------|-------------------:|----------------------------------------------------------------------|
-| `CRYPTOMATOR_VAULT_PASSWORD`   | required           | Password for the Cryptomator vault                                   |
+| `CRYPTOMATOR_VAULT_PASSWORD`   | required if no password file is used               | Password for the Cryptomator vault. If both password variables are set, this value takes precedence. |
+| `CRYPTOMATOR_VAULT_PASSWORD_FILE` | unset | Full path to a file containing the Cryptomator vault password. Used only when `CRYPTOMATOR_VAULT_PASSWORD` is not set. |
 | `CRYPTOMATOR_MOUNT_MODE`       | `auto`             | Mount mode: `fuse`, `webdav`, or `auto`                              |
 | `SYNC_DIR`                     | `/sync`            | Source directory inside the container                                |
 | `VAULT_ENCRYPTED_DIR`          | `/vault-encrypted` | Encrypted vault directory inside the container                       |
@@ -163,7 +165,6 @@ Possible `current-status` values:
 | `UPSTREAM_CONFIG`              | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
 | `UPSTREAM_EXTRA_ARGS`          | empty              | Additional arguments passed to rclone                                |
 | `UPSTREAM_START_DELAY_SECONDS` | `0`                | Optional delay between rsync (`sync` -> `vault`) and rclone (`vault` -> `remote`) |
-
 
 ## 🏷️ Image Labels
 
