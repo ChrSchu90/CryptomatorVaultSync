@@ -20,7 +20,7 @@ exit_failed() {
 }
 
 cleanup() {
-  fix_test_file_permissions 
+  fix_test_file_permissions
   rm -rf ./tests/rclone-remote ./tests/sync ./tests/vault ./tests/state ./tests/config
   docker image rm "$IMAGE_NAME" >/dev/null 2>&1 || true
 }
