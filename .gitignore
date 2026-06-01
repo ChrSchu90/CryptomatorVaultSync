@@ -33,6 +33,7 @@ obj/x64/
 /tests/state/
 /tests/tmp-vault/
 /tests/rclone-remote/
+/tests/secrets/
 
 [Dd]ebug/x86/
 [Dd]ebugPublic/x86/
