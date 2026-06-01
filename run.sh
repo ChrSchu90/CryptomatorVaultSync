@@ -5,6 +5,7 @@ EXIT_OK=0
 EXIT_GENERAL_ERROR=1
 EXIT_CONFIG_ERROR=2
 
+DRY_RUN="${DRY_RUN:-false}"
 SYNC_DIR="${SYNC_DIR:-/sync}"
 STATE_DIR="${STATE_DIR:-/state}"
 
@@ -199,17 +200,27 @@ wait_for_mountpoint() {
 }
 
 sync_once() {
+  local dry_run_args=()
   local delete_args=()
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    dry_run_args=(--dry-run)
+    log_warn "DRY_RUN enabled. No files will be written to the vault."
+  fi
 
   if [[ "$RSYNC_DELETE" == "true" ]]; then
     delete_args=(--delete)
   fi
 
-  log_info "Syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log_info "Dry-run syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
+  else
+    log_info "Syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
+  fi
 
   set +e
   # shellcheck disable=SC2086
-  rsync $RSYNC_ARGS "${delete_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
+  rsync $RSYNC_ARGS "${dry_run_args[@]}" "${delete_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
   local rsync_exit_code="$?"
   set -e
 
@@ -385,6 +396,10 @@ validate_config() {
       ;;
   esac
 
+  if [[ "$DRY_RUN" != "true" && "$DRY_RUN" != "false" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "DRY_RUN must be true or false"
+  fi
+
   if [[ "$RSYNC_DELETE" != "true" && "$RSYNC_DELETE" != "false" ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_DELETE must be true or false"
   fi
@@ -460,7 +475,7 @@ mount_vault() {
 }
 
 prepare_vault_for_rclone() {
-  if [[ "$UPSTREAM_ENABLED" != "true" ]]; then
+  if [[ "$UPSTREAM_ENABLED" != "true" ]] || [[ "$DRY_RUN" == "true" ]]; then
     return 0
   fi
 
@@ -491,6 +506,11 @@ handle_upstream_error() {
 
 run_rclone() {
   if [[ "$UPSTREAM_ENABLED" != "true" ]]; then
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log_warn "Skipping upstream sync because DRY_RUN=true."
     return 0
   fi
 
@@ -547,7 +567,12 @@ sync_cycle() {
     return 0
   fi
 
-  write_status "last-success"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log_warn "DRY_RUN finished successfully. last-success was not updated."
+  else
+    write_status "last-success"
+  fi
+
   write_status "current-status" "idle"
 }
 

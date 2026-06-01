@@ -122,6 +122,16 @@ assert_exit_code() {
   log "PASSED: exit code $actual"
 }
 
+assert_file_not_exists() {
+  local file="$1"
+
+  if [[ -f "$file" ]]; then
+    exit_failed "FAILED: expected file not to exist: $file"
+  fi
+
+  log "PASSED: file does not exist: $file"
+}
+
 assert_file_exists() {
   local file="$1"
 
@@ -372,6 +382,51 @@ assert_exit_code 2 \
     -e UPSTREAM_START_DELAY_SECONDS=-1
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "UPSTREAM_START_DELAY_SECONDS must be a non-negative integer"
+
+log "TEST: Invalid DRY_RUN"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e DRY_RUN=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_contains_text ./tests/state/last-error "DRY_RUN must be true or false"
+
+log "TEST: DRY_RUN does not change vault"
+docker_cleanup
+before="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from dry-run test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e DRY_RUN=true
+after="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" != "$after" ]]; then
+  exit_failed "FAILED: Vault changed during DRY_RUN before=$before after=$after"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_not_exists ./tests/state/last-success
+
+log "TEST: DRY_RUN skips upstream sync"
+docker_cleanup
+before_vault="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+before_remote="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from dry-run upstream test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e DRY_RUN=true \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_DESTINATIONS=remote:temp-vault
+after_vault="$(find ./tests/tmp-vault -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+after_remote="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before_vault" != "$after_vault" ]]; then
+  exit_failed "FAILED: Vault changed during DRY_RUN with upstream enabled"
+fi
+if [[ "$before_remote" != "$after_remote" ]]; then
+  exit_failed "FAILED: Remote changed during DRY_RUN"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_not_exists ./tests/state/last-success
 
 log "TEST: One-shot vault file copy"
 docker_cleanup
