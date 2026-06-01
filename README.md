@@ -156,6 +156,7 @@ Possible `current-status` values:
 | `VAULT_ENCRYPTED_DIR`          | `/vault-encrypted` | Encrypted vault directory inside the container                       |
 | `DRY_RUN`                      | `false`            | If `true`, runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. |
 | `RSYNC_DELETE`                 | `false`            | If `true`, delete files in the vault that no longer exist in `/sync` |
+| `RSYNC_EXCLUDE_FILE`           | empty              | Optional path to an rsync exclude file. When set, it is passed to rsync via `--exclude-from`. |
 | `RSYNC_ARGS`                   | `-rtv --no-owner --no-group --no-perms` | Base rsync arguments                            |
 | `RSYNC_EXTRA_ARGS`             | empty              | Additional rsync arguments                                           |
 | `MOUNT_TIMEOUT_SECONDS`        | `60`               | Timeout for mount operations                                         |
@@ -164,7 +165,7 @@ Possible `current-status` values:
 | `UPSTREAM_FAIL_ACTION`         | `exit`             | Behavior when rclone fails. `exit` stops the container with exit code; `continue` logs the error and retries on the next cycle in continuous mode. **One-shot mode always exits on upstream errors.** |
 | `UPSTREAM_MODE`                | `sync`             | rclone operation mode. Supported values: `sync` and `copy`. `sync` mirrors the encrypted vault to the destination, including deletions. `copy` uploads new/changed files without deleting remote files. |
 | `UPSTREAM_DESTINATIONS`        | empty              | One or more rclone destination paths separated by `\|`. Each remote name must match a section in `rclone.conf` e.g. `onedrive:Vault\|gdrive:Vault`   |
-| `UPSTREAM_CONFIG`              | `/rclone/rclone.conf` | Path to the rclone configuration file inside the container        |
+| `UPSTREAM_CONFIG`              | `/config/rclone.conf` | Path to the rclone configuration file inside the container        |
 | `UPSTREAM_EXTRA_ARGS`          | empty              | Additional arguments passed to rclone                                |
 | `UPSTREAM_START_DELAY_SECONDS` | `0`                | Optional delay between rsync (`sync` -> `vault`) and rclone (`vault` -> `remote`) |
 
@@ -318,8 +319,8 @@ This is the default.
 To create an rclone config, run the interactive rclone config command:
 ```bash
 docker run --rm -it \
-  -v /path/to/rclone:/rclone \
-  rclone/rclone config --config /rclone/rclone.conf
+  -v /path/to/config:/config \
+  rclone/rclone config --config /config/rclone.conf
 ```
 
 After the config has been created, set `UPSTREAM_DESTINATIONS` to one or more remote paths you want to sync to, for example:
