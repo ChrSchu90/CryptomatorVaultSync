@@ -69,9 +69,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # /sync             Source root dir with files that should be synced
 # /vault-encrypted  Encrypted Cryptomator vault mount
 # /vault-decrypted  Internal temporary mount point. The host usually cannot see its contents because the mount is created inside the container namespace.
-# /rclone           Config file directory for optional rclone to e.g. Google Drive or OneDrive
 # /state            Optional state files for healthcheck
-VOLUME ["/sync", "/vault-encrypted", "/rclone", "/state"]
+# /config           Optional config files such as rclone.conf, vault-password, and rsync-exclude.txt
+VOLUME ["/sync", "/vault-encrypted", "/config", "/state"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/run.sh"]
