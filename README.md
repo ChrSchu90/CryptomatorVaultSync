@@ -133,12 +133,12 @@ A typical host-side setup can look like this:
 
 These directories are mounted into the container as:
 
-| Host directory | Container path | Required | Recommended mode | Description |
-|---|---|---:|---|---|
-| `./sync` | `/sync` | yes | read-only | Source files that should be copied into the decrypted vault view. |
-| `./vault` | `/vault-encrypted` | yes | read-write | Existing initialized Cryptomator vault. |
-| `./config` | `/config` | optional | read-only | Optional config files such as `vault-password`, `rclone.conf`, and `rsync-exclude.txt`. |
-| `./state` | `/state` | optional | read-write | Status files used by the healthcheck and external monitoring. |
+| Container path | Required | Recommended mode | Description |
+|---|---:|---|---|
+| [`/sync`](#sync) | yes | read-only | Source files that should be copied into the decrypted vault view. |
+| [`/vault-encrypted`](#vault-encrypted) | yes | read-write | Existing initialized Cryptomator vault. |
+| [`/config`](#config) | optional | read-only | Optional config files such as `vault-password`, `rclone.conf`, and `rsync-exclude.txt`. |
+| [`/state`](#state) | optional | read-write | Status files used by the healthcheck and external monitoring. |
 
 Example volume mapping:
 
@@ -555,22 +555,18 @@ If `UPSTREAM_FAIL_ACTION=continue` is set in continuous mode, upstream errors do
 
 ## 🏷️ Image tags
 
-This image follows semantic versioning. Use specific version tags for reproducibility.
+This image follows semantic versioning.
+Use specific version tags for reproducibility. Preview tags are not recommended for production.
 
-Stable tags:
-
-- `latest` – most recent stable release
-- `1` – latest stable release in major version `1`
-- `1.2` – latest stable release in minor version `1.2`
-- `1.2.3` – specific stable patch version
-
-Preview tags are not recommended for production:
-
-- `preview`
-- `1-preview`
-- `1.2-preview`
-- `1.2.3-preview`
-- `1.2.3-beta.1`
+- `latest` – Most recent stable release
+- `1` – Latest stable release in major version `1`
+- `1.2` – Latest stable release in minor version `1.2`
+- `1.2.3` – Specific stable patch version (fully pinned)
+- `preview` – Latest preview build
+- `1-preview` – Latest preview for major version `1`
+- `1.2-preview` – Latest preview for minor version `1.2`
+- `1.2.3-preview` – Latest preview for patch version `1.2.3`
+- `1.2.3-beta.1` – Specific preview build (fully pinned)
 
 ## 🏁 Exit codes
 
