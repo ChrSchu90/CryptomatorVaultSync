@@ -53,6 +53,7 @@ Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative sour
 - Optional `/state` volume for monitoring files
 - Optional `rclone` to remote destinations
 - Optional read vault password from file
+- Dry-run simulation to test what would be synced from `/sync` to `/vault-decrypted`. No files are written to the vault or upstream destinations.
 
 ## 📋 Requirements
 
@@ -153,6 +154,7 @@ Possible `current-status` values:
 | `CRYPTOMATOR_MOUNT_MODE`       | `auto`             | Mount mode: `fuse`, `webdav`, or `auto`                              |
 | `SYNC_DIR`                     | `/sync`            | Source directory inside the container                                |
 | `VAULT_ENCRYPTED_DIR`          | `/vault-encrypted` | Encrypted vault directory inside the container                       |
+| `DRY_RUN`                      | `false`            | If `true`, runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. |
 | `RSYNC_DELETE`                 | `false`            | If `true`, delete files in the vault that no longer exist in `/sync` |
 | `RSYNC_ARGS`                   | `-rtv --no-owner --no-group --no-perms` | Base rsync arguments                            |
 | `RSYNC_EXTRA_ARGS`             | empty              | Additional rsync arguments                                           |
