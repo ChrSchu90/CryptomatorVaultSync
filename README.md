@@ -254,7 +254,7 @@ Possible `current-status` values:
 | `STATE_DIR` | `/state` | Directory for state files. |
 | `RSYNC_DELETE` | `false` | If `true`, delete files in the vault that no longer exist in `/sync`. |
 | `RSYNC_EXCLUDE_FILE` | empty | Optional path to an rsync exclude file. See [Rsync exclude file](#-rsync-exclude-file). |
-| `RSYNC_ARGS` | `-rtv --itemize-changes --no-owner --no-group --no-perms` | Base rsync arguments. |
+| `RSYNC_ARGS` | `-rtvi --no-owner --no-group --no-perms` | Base rsync arguments. |
 | `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |
 | `MOUNT_TIMEOUT_SECONDS` | `60` | Timeout for mount operations. |
 | `SYNC_INTERVAL_MINUTES` | `0` | `0` enables one-shot mode. Any positive value enables continuous mode. |
