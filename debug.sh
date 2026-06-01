@@ -8,7 +8,7 @@ DOCKER_PLATFORM=linux/amd64 # linux/amd64 linux/arm64/v8
 CRYPTOMATOR_CLI_RELEASE=0.6.2
 RCLONE_RELEASE=1.74.2
 
-mkdir -p ./debug/sync ./debug/vault ./debug/rclone
+mkdir -p ./debug/sync ./debug/vault ./debug/config
 
 # Create Rclone config
 # docker run --rm -it -v ./debug/config:/config rclone/rclone config --config /config/rclone.conf
@@ -17,8 +17,9 @@ docker buildx build --load --progress=plain --platform ${DOCKER_PLATFORM} --buil
   docker run --rm -it --platform ${DOCKER_PLATFORM} \
     --env-file ./debug/.env \
     -v ./debug/sync:/sync:ro \
+    -v ./debug/config:/config:ro \
     -v ./debug/vault:/vault-encrypted \
-    -v ./debug/rclone:/rclone \
+    -v ./debug/local-remote/vault:/local-remote/vault \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
     --security-opt apparmor:unconfined \
