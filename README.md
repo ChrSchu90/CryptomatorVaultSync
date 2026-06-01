@@ -1,4 +1,4 @@
-# Cryptomator Vault Sync
+# 🐳 Cryptomator Vault Sync
 
 [![Build](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml/badge.svg)](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml)
 
