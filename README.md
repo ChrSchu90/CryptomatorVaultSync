@@ -40,6 +40,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
 - [💚 Healthcheck, state files, and restarts](#-healthcheck-state-files-and-restarts)
 - [🏷️ Image tags](#-image-tags)
 - [🏁 Exit codes](#-exit-codes)
+- [🔐 Security notes](#-security-notes)
 - [✅ Backup verification](#-backup-verification)
 - [🚧 Development and testing](#-development-and-testing)
 
@@ -603,6 +604,24 @@ Use specific version tags for reproducibility. Preview tags are not recommended 
 | `0` | Success or clean stop via `CTRL+C` / `docker stop`. |
 | `1` | Runtime error, mount error, rsync error, or upstream error. |
 | `2` | Invalid configuration. |
+
+
+## 🔐 Security notes
+
+This container needs elevated mount permissions to unlock and mount a Cryptomator vault inside the container. Treat it as a privileged workload and only mount the host paths it really needs.
+
+Recommended checklist:
+
+| Area | Recommendation |
+|---|---|
+| `/sync` | Mount read-only whenever possible. |
+| `/config` | Mount read-only and protect files such as `vault-password` and `rclone.conf`. |
+| `/state` | Keep writable, but do not store secrets there. |
+| `/vault-decrypted` | Do not mount from the host. It is an internal temporary mount point. |
+| Host mounts | Avoid broad mounts such as `/`, `/volume1`, or a full home directory. |
+| Network | Use `network_mode: none` when `UPSTREAM_ENABLED=false`. |
+| rclone | Protect `rclone.conf`, because it may contain cloud access tokens. |
+| Passwords | Prefer `CRYPTOMATOR_VAULT_PASSWORD_FILE` over putting the vault password directly into Compose files. |
 
 ## ✅ Backup verification
 
