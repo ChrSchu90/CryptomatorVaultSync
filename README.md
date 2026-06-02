@@ -314,7 +314,13 @@ docker run --rm -it \
 
 ## 🧩 Docker Compose
 
-See the full example: [`example/docker-compose.yml`](example/docker-compose.yml)
+Choose the example that matches your upstream sync strategy:
+
+| File | Use case |
+|---|---|
+| [`docker-compose.no-upstream.yml`](example/docker-compose.no-upstream.yml) | Local encrypted vault only. Use this when the host handles upstream sync externally, for example with Synology Cloud Sync, Google Drive Desktop, or OneDrive. |
+| [`docker-compose.rclone-upstream.yml`](example/docker-compose.rclone-upstream.yml) | Container-managed upstream sync via rclone. |
+| [`docker-compose.full.yml`](example/docker-compose.full.yml) | Full reference example with all relevant options. |
 
 ```yaml
 services:

@@ -2,15 +2,15 @@ services:
   cryptomator-vault-sync:
     image: ghcr.io/chrschu90/cryptomator-vault-sync:1
     container_name: cryptomator-vault-sync
-    #restart: unless-stopped                                 # Recommended for continuous mode
-    #restart: no                                             # Recommended for one-shot/scheduled runs
-    network_mode: none                                       # Recommended for `UPSTREAM_ENABLED=false`
+    #restart: unless-stopped                                    # Recommended for continuous mode
+    #restart: no                                                # Recommended for one-shot/scheduled runs
+    network_mode: none                                          # Recommended for `UPSTREAM_ENABLED=false`
     cap_add:
-      - SYS_ADMIN                                            # Required
+      - SYS_ADMIN                                               # Required
     devices:
-      - /dev/fuse:/dev/fuse                                  # Required 
+      - /dev/fuse:/dev/fuse                                     # Required 
     security_opt:
-      - apparmor:unconfined                                  # Required
+      - apparmor:unconfined                                     # Required
     environment:
       CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"             # Required
       #CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password  # Optional replacement for CRYPTOMATOR_VAULT_PASSWORD

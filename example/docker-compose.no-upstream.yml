@@ -1,0 +1,24 @@
+services:
+  cryptomator-vault-sync:
+    image: ghcr.io/chrschu90/cryptomator-vault-sync:1
+    container_name: cryptomator-vault-sync
+    restart: unless-stopped
+    network_mode: none
+    cap_add:
+      - SYS_ADMIN
+    devices:
+      - /dev/fuse:/dev/fuse
+    security_opt:
+      - apparmor:unconfined
+    environment:
+      CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password
+      SYNC_INTERVAL_MINUTES: 5
+      RSYNC_DELETE: false
+      RSYNC_EXCLUDE_FILE: /config/rsync-exclude.txt
+      UPSTREAM_ENABLED: false
+      TZ: Europe/Berlin
+    volumes:
+      - /example/sync:/sync:ro
+      - /example/config:/config:ro
+      - /example/vault:/vault-encrypted
+      - /example/state:/state
