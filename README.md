@@ -267,6 +267,22 @@ When enabled, files that no longer exist in `/sync` will also be deleted from th
 
 Before enabling this option for the first time, run with `DRY_RUN=true` and review the rsync output.
 
+### `RSYNC_ARGS`
+
+```env
+RSYNC_ARGS=-rtvi --no-owner --no-group --no-perms
+```
+
+| Option       | Meaning                            |
+| ------------ | ---------------------------------- |
+| `-r`         | Copy directories recursively.      |
+| `-t`         | Preserve modification times.       |
+| `-v`         | Enable verbose output.             |
+| `-i`         | Show itemized changes in the logs. |
+| `--no-owner` | Do not preserve file owner.        |
+| `--no-group` | Do not preserve file group.        |
+| `--no-perms` | Do not preserve file permissions.  |
+
 ### `RSYNC_EXTRA_ARGS`
 
 `RSYNC_EXTRA_ARGS` can be used to pass additional arguments to `rsync`. These arguments are appended to the default `RSYNC_ARGS`.
