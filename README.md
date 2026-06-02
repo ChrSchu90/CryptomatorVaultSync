@@ -75,8 +75,6 @@ Files that already exist inside the Cryptomator vault are not copied back to `/s
 /sync -> Cryptomator vault
 ```
 
-Use `RSYNC_DELETE=true` only if `/sync` is intended to be the authoritative source.
-
 ## ✔️ Features
 
 - One-way sync from a plain source directory into a Cryptomator vault
@@ -247,7 +245,7 @@ Possible `current-status` values:
 | `SYNC_DIR` | `/sync` | Source directory inside the container. |
 | `VAULT_ENCRYPTED_DIR` | `/vault-encrypted` | Encrypted vault directory inside the container. |
 | `STATE_DIR` | `/state` | Directory for state files. |
-| `RSYNC_DELETE` | `false` | If `true`, delete files in the vault that no longer exist in `/sync`. |
+| `RSYNC_DELETE` | `false` | If `true`, delete files in the vault that no longer exist in `/sync`. Only enable this if `/sync` is the authoritative source. Use `DRY_RUN=true` first to review what would be deleted. |
 | `RSYNC_EXCLUDE_FILE` | empty | Optional path to an rsync exclude file. See [Rsync exclude file](#-rsync-exclude-file). |
 | `RSYNC_ARGS` | `-rtvi --no-owner --no-group --no-perms` | Base rsync arguments. |
 | `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |
@@ -260,6 +258,14 @@ Possible `current-status` values:
 | `UPSTREAM_CONFIG` | `/config/rclone.conf` | Path to the rclone configuration file. |
 | `UPSTREAM_EXTRA_ARGS` | empty | Additional arguments passed to rclone. |
 | `UPSTREAM_START_DELAY_SECONDS` | `0` | Optional delay after unmounting the vault before running rclone. |
+
+### `RSYNC_DELETE`
+
+Only enable `RSYNC_DELETE=true` if `/sync` is the authoritative source.
+
+When enabled, files that no longer exist in `/sync` will also be deleted from the decrypted vault view during sync. This deletion is then written into the encrypted Cryptomator vault.
+
+Before enabling this option for the first time, run with `DRY_RUN=true` and review the rsync output.
 
 ### `RSYNC_EXTRA_ARGS`
 
