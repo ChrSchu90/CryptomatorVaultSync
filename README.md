@@ -140,16 +140,6 @@ These directories are mounted into the container as:
 | [`/config`](#config) | optional | read-only | Optional config files such as `vault-password`, `rclone.conf`, and `rsync-exclude.txt`. |
 | [`/state`](#state) | optional | read-write | Status files used by the healthcheck and external monitoring. |
 
-Example volume mapping:
-
-```yaml
-volumes:
-  - /docker/cryptomator-vault-sync/sync:/sync:ro
-  - /docker/cryptomator-vault-sync/vault:/vault-encrypted
-  - /docker/cryptomator-vault-sync/config:/config:ro
-  - /docker/cryptomator-vault-sync/state:/state
-```
-
 ### `/sync`
 
 Source directory containing files that should be copied into the vault.
