@@ -20,7 +20,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
 
 - [💡 Use case](#-use-case)
 - [⛔ What this project does not do](#-what-this-project-does-not-do)
-- [✔️ Features](#-features)
+- [✔️ Features](#️-features)
 - [📋 Requirements](#-requirements)
 - [📁 Directory layout and volumes](#-directory-layout-and-volumes)
   - [`/sync`](#sync)
@@ -28,19 +28,29 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
   - [`/vault-decrypted`](#vault-decrypted)
   - [`/config`](#config)
   - [`/state`](#state)
-- [⚙️ Configuration](#-configuration)
+- [⚙️ Configuration](#️-configuration)
+  - [`RSYNC_DELETE`](#rsync_delete)
+  - [`RSYNC_ARGS`](#rsync_args)
+  - [`RSYNC_EXTRA_ARGS`](#rsync_extra_args)
+  - [`UPSTREAM_MODE`](#upstream_mode)
+  - [`UPSTREAM_EXTRA_ARGS`](#upstream_extra_args)
 - [💻 Docker run](#-docker-run)
 - [🧩 Docker Compose](#-docker-compose)
 - [🌐 Network mode](#-network-mode)
 - [🔄 Sync modes](#-sync-modes)
   - [⚡ One-shot mode](#-one-shot-mode)
-  - [♾️ Continuous mode](#-continuous-mode)
+  - [♾️ Continuous mode](#️-continuous-mode)
   - [🧪 Dry-run mode](#-dry-run-mode)
 - [🔗 Cryptomator mount modes](#-cryptomator-mount-modes)
+  - [`fuse`](#fuse)
+  - [`webdav`](#webdav)
+  - [`auto`](#auto)
 - [🚫 Rsync exclude file](#-rsync-exclude-file)
-- [⬆️ Rclone upstream sync](#-rclone-upstream-sync)
+- [⬆️ Rclone upstream sync](#️-rclone-upstream-sync)
+  - [`sync`](#upstream_mode)
+  - [`copy`](#upstream_mode)
 - [💚 Healthcheck, state files, and restarts](#-healthcheck-state-files-and-restarts)
-- [🏷️ Image tags](#-image-tags)
+- [🏷️ Image tags](#️-image-tags)
 - [🏁 Exit codes](#-exit-codes)
 - [🔐 Security notes](#-security-notes)
 - [✅ Backup verification](#-backup-verification)
@@ -63,7 +73,7 @@ A typical Synology setup can look like this:
 
 In that setup, rclone is not required inside this container because the host handles the upstream sync.
 
-If the host does not provide a suitable cloud sync mechanism, the optional [rclone upstream sync](#-rclone-upstream-sync) can sync `/vault-encrypted` to one or more remote destinations.
+If the host does not provide a suitable cloud sync mechanism, the optional [rclone upstream sync](#️-rclone-upstream-sync) can sync `/vault-encrypted` to one or more remote destinations.
 
 ## ⛔ What this project does not do
 
@@ -95,7 +105,7 @@ Files that already exist inside the Cryptomator vault are not copied back to `/s
 
 ## 📋 Requirements
 
-The container needs permission to create FUSE or WebDAV mounts inside the container.
+The container needs permission to create `FUSE` or `WebDAV` mounts inside the container.
 
 For the current architecture, use:
 
@@ -192,8 +202,8 @@ It can contain:
 
 Example config files:
 - [`rsync-exclude.txt`](example/config/rsync-exclude.txt)
-- [`vault-password`](example/config/vault-password.example)
-- `rclone.conf` can be generated via [interactive container](#-rclone-upstream-sync)
+- [`vault-password.example`](example/config/vault-password.example)
+- `rclone.conf` can be generated with an [interactive rclone container](#️-rclone-upstream-sync)
 
 ### `/state`
 
@@ -250,7 +260,7 @@ Possible `current-status` values:
 | `SYNC_INTERVAL_MINUTES` | `0` | `0` enables one-shot mode. Any positive value enables continuous mode. |
 | `UPSTREAM_ENABLED` | `false` | Enable optional rclone upstream sync after the encrypted vault has been updated. |
 | `UPSTREAM_FAIL_ACTION` | `exit` | Behavior when rclone fails. `exit` stops the container; `continue` keeps continuous mode running and retries on the next cycle. One-shot mode always exits on upstream errors. |
-| `UPSTREAM_MODE` | `sync` | rclone mode: `sync` or `copy`. |
+| `UPSTREAM_MODE` | `sync` | rclone operation mode. `sync` mirrors the local encrypted vault to the destination, including deletions. This is the recommended mode when the upstream destination should be an exact copy of the local vault. `copy` uploads new and changed files without deleting remote files, but may leave old encrypted vault files at the destination. |
 | `UPSTREAM_DESTINATIONS` | empty | One or more rclone destination paths separated by `|`, for example `onedrive:Vault|gdrive:Vault`. |
 | `UPSTREAM_CONFIG` | `/config/rclone.conf` | Path to the rclone configuration file. |
 | `UPSTREAM_EXTRA_ARGS` | empty | Additional arguments passed to rclone. |
@@ -298,9 +308,18 @@ RSYNC_EXTRA_ARGS=--max-size=500M
 RSYNC_EXTRA_ARGS=--bwlimit=5000
 ```
 
+### `UPSTREAM_MODE`
+
+`UPSTREAM_MODE` controls how rclone writes `/vault-encrypted` to the configured upstream destination.
+
+| Option   | Meaning                            |
+| -------- | ---------------------------------- |
+| `sync`   | Mirrors the local encrypted vault to the destination, including deletions. This is recommended when the upstream destination should be an exact copy of the local Cryptomator vault.      |
+| `copy`   | Uploads new and changed files without deleting remote files. This can be useful for conservative uploads, but it may leave old encrypted vault files at the destination and should not be treated as an exact mirror.       |
+
 ### `UPSTREAM_EXTRA_ARGS`
 
-`UPSTREAM_EXTRA_ARGS` can be used to pass additional arguments to `rclone`. These arguments are appended to the rclone command. See the official [rclone global flags documentation](https://rclone.org/flags/)
+`UPSTREAM_EXTRA_ARGS` can be used to pass additional arguments to `rclone`. These arguments are appended to the rclone command. See the official [rclone global flags documentation](https://rclone.org/flags/).
 
 ```env
 # Limit rclone bandwidth to 8M
@@ -344,7 +363,7 @@ Choose the example that matches your upstream sync strategy:
 | [`docker-compose.rclone-upstream.yml`](example/docker-compose.rclone-upstream.yml) | Container-managed upstream sync via rclone. |
 | [`docker-compose.full.yml`](example/docker-compose.full.yml) | Full reference example with all relevant options. |
 
-You can also use an [`environment file`](example/.env.example) :
+You can also use an [`environment file`](example/.env.example):
 
 ```yml
 env_file:
@@ -584,19 +603,7 @@ set:
 UPSTREAM_DESTINATIONS=gdrive:Vaults/Backup Vault
 ```
 
-### `sync` vs `copy`
-
-```env
-UPSTREAM_MODE=sync
-```
-
-Mirrors `/vault-encrypted` to the destination, including deletions.
-
-```env
-UPSTREAM_MODE=copy
-```
-
-Uploads new and changed files without deleting remote files.
+`UPSTREAM_MODE` controls whether rclone uses `copy` or `sync`. See [Configuration](#upstream_mode).
 
 ## 💚 Healthcheck, state files, and restarts
 
@@ -640,7 +647,6 @@ Use specific version tags for reproducibility. Preview tags are not recommended 
 | `0` | Success or clean stop via `CTRL+C` / `docker stop`. |
 | `1` | Runtime error, mount error, rsync error, or upstream error. |
 | `2` | Invalid configuration. |
-
 
 ## 🔐 Security notes
 
