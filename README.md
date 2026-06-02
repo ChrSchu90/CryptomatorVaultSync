@@ -13,7 +13,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
    ↓ Cryptomator CLI
 🔒 /vault-encrypted
    ↓ rclone (optional)
-☁️ upstream destination(s)
+⬆️ upstream destination(s)
 ```
 
 ## 📑 Table of contents
@@ -38,7 +38,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
   - [🧪 Dry-run mode](#-dry-run-mode)
 - [🔗 Cryptomator mount modes](#-cryptomator-mount-modes)
 - [🚫 Rsync exclude file](#-rsync-exclude-file)
-- [☁️ Rclone upstream sync](#-rclone-upstream-sync)
+- [⬆️ Rclone upstream sync](#-rclone-upstream-sync)
 - [💚 Healthcheck, state files, and restarts](#-healthcheck-state-files-and-restarts)
 - [🏷️ Image tags](#-image-tags)
 - [🏁 Exit codes](#-exit-codes)
@@ -190,13 +190,10 @@ It can contain:
 /config/rsync-exclude.txt
 ```
 
-Common environment variables pointing into `/config` are:
-
-```env
-CRYPTOMATOR_VAULT_PASSWORD_FILE=/config/vault-password
-UPSTREAM_CONFIG=/config/rclone.conf
-RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
-```
+Example config files:
+- [`rsync-exclude.txt`](example/config/rsync-exclude.txt)
+- [`vault-password`](example/config/vault-password.example)
+- `rclone.conf` can be generated via [interactive container](#-rclone-upstream-sync)
 
 ### `/state`
 
@@ -347,11 +344,7 @@ Choose the example that matches your upstream sync strategy:
 | [`docker-compose.rclone-upstream.yml`](example/docker-compose.rclone-upstream.yml) | Container-managed upstream sync via rclone. |
 | [`docker-compose.full.yml`](example/docker-compose.full.yml) | Full reference example with all relevant options. |
 
-You can also use an environment file:
-
-```bash
-cp example/.env.example .env
-```
+You can also use an [`environment file`](example/.env.example) :
 
 ```yml
 env_file:
@@ -539,7 +532,7 @@ cache/
 
 excludes directories named `cache` anywhere below `/sync`.
 
-## ☁️ Rclone upstream sync
+## ⬆️ Rclone upstream sync
 
 rclone is optional. Enable it only when the container itself should upload or copy the encrypted vault to one or more upstream destinations.
 

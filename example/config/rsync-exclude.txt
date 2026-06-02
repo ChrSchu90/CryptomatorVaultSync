@@ -1,0 +1,23 @@
+# Example rsync exclude file
+# Used with:
+# RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
+#
+# Patterns are interpreted relative to /sync.
+
+# Synology metadata
+@eaDir/
+#recycle/
+
+# macOS metadata
+.DS_Store
+.AppleDouble/
+._*
+
+# Windows metadata
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+~$*

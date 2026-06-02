@@ -3,6 +3,12 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# Local example secrets
+example/config/vault-password
+example/config/rclone.conf
+!example/config/vault-password.example
+!example/config/rsync-exclude.txt
+
 # User-specific files
 *.rsuser
 *.suo
