@@ -32,7 +32,6 @@ UPSTREAM_EXTRA_ARGS="${UPSTREAM_EXTRA_ARGS:-}"
 UPSTREAM_START_DELAY_SECONDS="${UPSTREAM_START_DELAY_SECONDS:-0}"
 
 CRYPTOMATOR_PID=""
-WEBDAV_MOUNTED="false"
 EXIT_IS_FAILURE="false"
 
 trim() {
@@ -94,7 +93,7 @@ cleanup_resources() {
   log_info "Cleaning up..."
 
   if mountpoint -q "$VAULT_DECRYPTED_DIR"; then
-    log_info "Unmounting decrypted vault: $VAULT_DECRYPTED_DIR"
+    log_info "Unmounting Cryptomator vault: $VAULT_DECRYPTED_DIR"
 
     fusermount3 -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
       fusermount -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
@@ -113,7 +112,6 @@ cleanup_resources() {
         wait "$CRYPTOMATOR_PID" 2>/dev/null || true
         CRYPTOMATOR_PID=""
         log_info "Cryptomator CLI stopped."
-        WEBDAV_MOUNTED="false"
         return 0
       fi
       sleep 1
@@ -127,7 +125,6 @@ cleanup_resources() {
   fi
 
   CRYPTOMATOR_PID=""
-  WEBDAV_MOUNTED="false"
 }
 
 cleanup() {
@@ -219,9 +216,9 @@ sync_once() {
   fi
 
   if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "Dry-run syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
+    log_info "Running rsync dry-run syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
   else
-    log_info "Syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
+    log_info "Running rsync syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
   fi
 
   set +e
@@ -231,14 +228,14 @@ sync_once() {
   set -e
 
   if [[ "$rsync_exit_code" -ne 0 ]]; then
-    exit_failed "$EXIT_GENERAL_ERROR" "rsync failed with exit code $rsync_exit_code"
+    exit_failed "$EXIT_GENERAL_ERROR" "Rsync failed with exit code $rsync_exit_code"
   fi
 
-  log_info "Sync finished."
+  log_info "Rsync finished."
 }
 
 unlock_fuse() {
-  log_info "Unlocking vault via FUSE..."
+  log_info "Unlocking Cryptomator vault via FUSE..."
 
   local password_file="/tmp/cryptomator-password"
   local cryptomator_log="/tmp/cryptomator-fuse.log"
@@ -271,7 +268,7 @@ unlock_fuse() {
 }
 
 unlock_webdav() {
-  log_info "Unlocking vault via WebDAV..."
+  log_info "Unlocking Cryptomator vault via WebDAV..."
 
   local cryptomator_log="/tmp/cryptomator-webdav.log"
   local password_file="/tmp/cryptomator-password"
@@ -349,7 +346,6 @@ unlock_webdav() {
       "$webdav_url" \
       "$VAULT_DECRYPTED_DIR" \
       2>"$davfs_error_log"; then
-      WEBDAV_MOUNTED="true"
       log_info "Vault unlocked via WebDAV and mounted to $VAULT_DECRYPTED_DIR."
       return 0
     fi
@@ -495,7 +491,7 @@ prepare_vault_for_rclone() {
     return 0
   fi
 
-  log_info "Preparing encrypted vault for rclone..."
+  log_info "Preparing Cryptomator vault for rclone..."
 
   sync -f "$VAULT_ENCRYPTED_DIR" 2>/dev/null || sync
 
@@ -602,6 +598,8 @@ run_sync() {
   log_info "Continuous sync enabled. Interval: ${SYNC_INTERVAL_MINUTES} minute(s)"
   while true; do
     sync_cycle
+    next_sync_time="$(date -d "+${SYNC_INTERVAL_MINUTES} minutes" '+%Y-%m-%d %H:%M:%S')"
+    log_info "Next sync cycle will start at $next_sync_time"
     sleep "$((SYNC_INTERVAL_MINUTES * 60))"
   done
 }
