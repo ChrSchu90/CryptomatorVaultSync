@@ -321,18 +321,19 @@ UPSTREAM_EXTRA_ARGS=-vv
 
 ## 💻 Docker run
 
-Minimal one-shot example without rclone:
+Minimal [dry-run](#-dry-run-mode) example without rclone:
 
 ```bash
 docker run --rm -it \
   --network none \
-  -e CRYPTOMATOR_VAULT_PASSWORD='MyVaultPassword' \
   -v /path/to/sync:/sync:ro \
   -v /path/to/vault:/vault-encrypted \
   -v /path/to/state:/state \
   --cap-add SYS_ADMIN \
   --device /dev/fuse:/dev/fuse \
   --security-opt apparmor:unconfined \
+  -e CRYPTOMATOR_VAULT_PASSWORD='MyVaultPassword' \
+  -e DRY_RUN='true' \
   ghcr.io/chrschu90/cryptomator-vault-sync:1
 ```
 
@@ -345,6 +346,19 @@ Choose the example that matches your upstream sync strategy:
 | [`docker-compose.no-upstream.yml`](example/docker-compose.no-upstream.yml) | Local encrypted vault only. Use this when the host handles upstream sync externally, for example with Synology Cloud Sync, Google Drive Desktop, or OneDrive. |
 | [`docker-compose.rclone-upstream.yml`](example/docker-compose.rclone-upstream.yml) | Container-managed upstream sync via rclone. |
 | [`docker-compose.full.yml`](example/docker-compose.full.yml) | Full reference example with all relevant options. |
+
+You can also use an environment file:
+
+```bash
+cp example/.env.example .env
+```
+
+```yml
+env_file:
+  - .env
+```
+
+Minimal [dry-run](#-dry-run-mode) example without rclone:
 
 ```yaml
 services:
@@ -359,9 +373,8 @@ services:
     security_opt:
       - apparmor:unconfined
     environment:
-      CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password
-      SYNC_INTERVAL_MINUTES: 0
-      UPSTREAM_ENABLED: false
+      CRYPTOMATOR_VAULT_PASSWORD: MyVaultPassword
+      DRY_RUN: true
     volumes:
       - /path/to/sync:/sync:ro
       - /path/to/vault:/vault-encrypted
