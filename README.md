@@ -14,7 +14,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
 ☁️ upstream destination(s)
 ```
 
-## Table of contents
+## 📑 Table of contents
 
 - [💡 Use case](#-use-case)
 - [⛔ What this project does not do](#-what-this-project-does-not-do)
@@ -31,15 +31,17 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
 - [🧩 Docker Compose](#-docker-compose)
 - [🌐 Network mode](#-network-mode)
 - [🔄 Sync modes](#-sync-modes)
-  - [One-shot mode](#one-shot-mode)
-  - [Continuous mode](#continuous-mode)
-  - [Dry-run mode](#dry-run-mode)
+  - [⚡ One-shot mode](#-one-shot-mode)
+  - [♾️ Continuous mode](#-continuous-mode)
+  - [🧪 Dry-run mode](#-dry-run-mode)
 - [🔗 Cryptomator mount modes](#-cryptomator-mount-modes)
 - [🚫 Rsync exclude file](#-rsync-exclude-file)
 - [☁️ Rclone upstream sync](#-rclone-upstream-sync)
 - [💚 Healthcheck, state files, and restarts](#-healthcheck-state-files-and-restarts)
 - [🏷️ Image tags](#-image-tags)
 - [🏁 Exit codes](#-exit-codes)
+- [✅ Backup verification](#-backup-verification)
+- [🚧 Development and testing](#-development-and-testing)
 
 ## 💡 Use case
 
@@ -256,6 +258,42 @@ Possible `current-status` values:
 | `UPSTREAM_EXTRA_ARGS` | empty | Additional arguments passed to rclone. |
 | `UPSTREAM_START_DELAY_SECONDS` | `0` | Optional delay after unmounting the vault before running rclone. |
 
+### `RSYNC_EXTRA_ARGS`
+
+`RSYNC_EXTRA_ARGS` can be used to pass additional arguments to `rsync`. These arguments are appended to the default `RSYNC_ARGS`.
+
+```env
+# Use checksums instead of size and modification time to detect changed files
+RSYNC_EXTRA_ARGS=--checksum
+
+# Skip files that already exist in the vault
+RSYNC_EXTRA_ARGS=--ignore-existing
+
+# Skip files larger than 500M
+RSYNC_EXTRA_ARGS=--max-size=500M
+
+# Limit bandwidth to approximately 5000 KiB/s
+RSYNC_EXTRA_ARGS=--bwlimit=5000
+```
+
+### `UPSTREAM_EXTRA_ARGS`
+
+`UPSTREAM_EXTRA_ARGS` can be used to pass additional arguments to `rclone`. These arguments are appended to the rclone command.
+
+```env
+# Limit rclone bandwidth to 8M
+UPSTREAM_EXTRA_ARGS=--bwlimit 8M
+
+# Reduce parallel transfers and checks
+UPSTREAM_EXTRA_ARGS=--transfers 2 --checkers 4
+
+# Set the Google Drive upload chunk size
+UPSTREAM_EXTRA_ARGS=--drive-chunk-size 64M
+
+# Enable verbose rclone logging for debugging
+UPSTREAM_EXTRA_ARGS=-vv
+```
+
 ## 💻 Docker run
 
 Minimal one-shot example without rclone:
@@ -326,7 +364,7 @@ Use Docker's default bridge network or omit `network_mode`.
 
 ## 🔄 Sync modes
 
-### One-shot mode
+### ⚡ One-shot mode
 
 Set:
 
@@ -344,7 +382,7 @@ The container will:
 
 Use this mode with an external scheduler such as cron or Synology Task Scheduler.
 
-### Continuous mode
+### ♾️ Continuous mode
 
 Set a positive interval:
 
@@ -364,7 +402,7 @@ Each cycle will:
 
 The decrypted vault is not kept mounted between cycles. This is intentional: rclone or host-side sync tools should see a stable, closed encrypted vault state instead of files that Cryptomator is still updating.
 
-### Dry-run mode
+### 🧪 Dry-run mode
 
 Set:
 
@@ -374,11 +412,11 @@ DRY_RUN=true
 
 Dry-run mode:
 
-- unlocks and mounts the vault normally,
-- runs rsync with `--dry-run`,
-- does not write files to the vault,
-- skips rclone/upstream sync,
-- does not update `/state/last-success`.
+- Unlocks and mounts the vault normally.
+- Runs rsync with `--dry-run`.
+- Does not write files to the vault.
+- Skips rclone/upstream sync.
+- Does not update `/state/last-success` because no real sync was performed.
 
 This is useful for checking what rsync would copy or delete before enabling a real sync, especially when using `RSYNC_DELETE=true`.
 
@@ -479,12 +517,12 @@ The remote name is the section name in `rclone.conf`:
 
 ```text
 [gdrive] # <-- remote name
- type = drive
- token = ...
+type = drive
+token = ...
 
 [onedrive]
- type = onedrive
- token = ...
+type = onedrive
+token = ...
 ```
 
 Multiple destinations are separated by `|`:
@@ -538,7 +576,7 @@ Recommended restart policies:
 
 | Mode | Restart policy | Reason |
 |---|---|---|
-| One-shot with external scheduler | `restart: no` | The scheduler should see the container exit code. |
+| One-shot with external scheduler | `restart: "no"` | The scheduler should see the container exit code. |
 | Continuous mode | `restart: unless-stopped` | Docker can restart the container after fatal runtime errors. |
 
 If `UPSTREAM_FAIL_ACTION=continue` is set in continuous mode, upstream errors do not stop the container. Instead, the container writes `upstream-error` to `/state/current-status`, writes the error to `/state/last-error`, and retries during the next sync cycle.
@@ -565,3 +603,44 @@ Use specific version tags for reproducibility. Preview tags are not recommended 
 | `0` | Success or clean stop via `CTRL+C` / `docker stop`. |
 | `1` | Runtime error, mount error, rsync error, or upstream error. |
 | `2` | Invalid configuration. |
+
+## ✅ Backup verification
+
+A backup is only useful if it can be opened and the expected files are readable.
+
+This project writes data into a standard Cryptomator vault. Verification should therefore be done with the official Cryptomator app or another trusted Cryptomator client.
+
+Recommended verification steps:
+
+1. Let the container finish a successful real sync cycle.
+2. Check `/state/last-success` to confirm when the last successful sync happened.
+3. Make sure the encrypted vault has been synced to the upstream destination.
+4. On another device, download or sync the encrypted vault from the upstream destination.
+5. Open the vault with the official Cryptomator app.
+6. Verify that important files are visible and readable.
+7. Repeat this regularly.
+
+Do not only check that encrypted files exist in the remote destination. The important test is whether the vault can be unlocked and the expected decrypted files can be read.
+
+If the upstream sync is handled by the host, for example Synology Cloud Sync, also verify that the host-side sync has completed before opening the vault on another device.
+
+`DRY_RUN=true` does not update `/state/last-success` and does not create a real backup. Use a real sync cycle for backup verification.
+
+## 🚧 Development and testing
+
+Run the local test suite with:
+
+```bash
+./test.sh
+```
+
+The test script:
+
+- Checks shell syntax
+- Builds the Docker image without cache
+- Validates configuration errors
+- Runs one-shot sync integration tests
+- Tests rclone/upstream behavior
+- Tests state files and healthcheck behavior
+
+The tests require Docker Buildx and a host environment that supports the required container mount permissions.
