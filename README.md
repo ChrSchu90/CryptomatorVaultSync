@@ -285,7 +285,7 @@ RSYNC_ARGS=-rtvi --no-owner --no-group --no-perms
 
 ### `RSYNC_EXTRA_ARGS`
 
-`RSYNC_EXTRA_ARGS` can be used to pass additional arguments to `rsync`. These arguments are appended to the default `RSYNC_ARGS`.
+`RSYNC_EXTRA_ARGS` can be used to pass additional arguments to `rsync`. These arguments are appended to the default `RSYNC_ARGS`. For all available options, see the [rsync(1) man page](https://www.man7.org/linux/man-pages/man1/rsync.1.html).
 
 ```env
 # Use checksums instead of size and modification time to detect changed files
@@ -303,7 +303,7 @@ RSYNC_EXTRA_ARGS=--bwlimit=5000
 
 ### `UPSTREAM_EXTRA_ARGS`
 
-`UPSTREAM_EXTRA_ARGS` can be used to pass additional arguments to `rclone`. These arguments are appended to the rclone command.
+`UPSTREAM_EXTRA_ARGS` can be used to pass additional arguments to `rclone`. These arguments are appended to the rclone command. See the official [rclone global flags documentation](https://rclone.org/flags/)
 
 ```env
 # Limit rclone bandwidth to 8M
