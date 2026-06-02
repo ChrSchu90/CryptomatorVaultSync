@@ -1,4 +1,6 @@
-# 🐳 Cryptomator Vault Sync [![Build](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml/badge.svg)](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml)
+# 🐳 Cryptomator Vault Sync 
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Build](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml/badge.svg)](https://github.com/ChrSchu90/CryptomatorVaultSync/actions/workflows/build.yml) [![GHCR](https://img.shields.io/badge/GHCR-cryptomator--vault--sync-blue?logo=github)](https://github.com/ChrSchu90/CryptomatorVaultSync/pkgs/container/cryptomator-vault-sync)
 
 A Docker container that syncs files one-way from a source directory into a [Cryptomator](https://cryptomator.org) vault, enabling encrypted storage while keeping the vault accessible with the official Cryptomator app.
 
