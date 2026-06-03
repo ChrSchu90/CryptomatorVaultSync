@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
+SYNC_CRON="${SYNC_CRON:-}"
 STATE_DIR="${STATE_DIR:-/state}"
 
-case "$SYNC_INTERVAL_MINUTES" in
-  ''|*[!0-9]*)
-    echo "SYNC_INTERVAL_MINUTES must be a non-negative integer"
-    exit 1
-    ;;
-esac
-
 # One-shot mode: the container exits after sync anyway, the container exit code is the health signal.
-if [[ "$SYNC_INTERVAL_MINUTES" == "0" ]]; then
+if [[ -z "$SYNC_CRON" ]]; then
   exit 0
 fi
 

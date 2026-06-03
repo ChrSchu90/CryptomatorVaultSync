@@ -49,7 +49,17 @@ jobs:
         echo "rclone_changed=$rclone_changed" >> "$GITHUB_OUTPUT"
         echo "::notice::[info] rclone_changed=$rclone_changed"
 
-        [[ "$rclone_changed" == "true" || "$cryptomator_changed" == "true" ]] && update_available=true || update_available=false
+        supercronic_current="$(sed -n -E 's/^ARG SUPERCRONIC_RELEASE=//p' Dockerfile | head -n1)"
+        echo "supercronic_current=$supercronic_current" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] supercronic_current=$supercronic_current"
+        supercronic_latest="$(gh release view --repo aptible/supercronic --json tagName --jq '.tagName' | sed 's/^v//')"
+        echo "supercronic_latest=$supercronic_latest" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] supercronic_latest=$supercronic_latest"
+        [[ "$supercronic_current" != "$supercronic_latest" ]] && supercronic_changed=true || supercronic_changed=false
+        echo "supercronic_changed=$supercronic_changed" >> "$GITHUB_OUTPUT"
+        echo "::notice::[info] supercronic_changed=$supercronic_changed"
+
+        [[ "$rclone_changed" == "true" || "$cryptomator_changed" == "true" || "$supercronic_changed" == "true" ]] && update_available=true || update_available=false
         echo "update_available=$update_available" >> "$GITHUB_OUTPUT"
         echo "::notice::[info] update_available=$update_available"
 
@@ -63,6 +73,9 @@ jobs:
 
         sed -i -E 's/^(ARG RCLONE_RELEASE=).*/\1${{ steps.versions.outputs.rclone_latest }}/' Dockerfile
         sed -i -E 's/^(RCLONE_RELEASE=).*/\1${{ steps.versions.outputs.rclone_latest }}/' debug.sh
+
+        sed -i -E 's/^(ARG SUPERCRONIC_RELEASE=).*/\1${{ steps.versions.outputs.supercronic_latest }}/' Dockerfile
+        sed -i -E 's/^(SUPERCRONIC_RELEASE=).*/\1${{ steps.versions.outputs.supercronic_latest }}/' debug.sh
     
     - name: Create Pull Request
       if: ${{ steps.versions.outputs.update_available == 'true' }}
@@ -75,4 +88,5 @@ jobs:
         body: |
           Updated upstream dependency:
           - Cryptomator CLI: `${{ steps.versions.outputs.cryptomator_current }}` to `${{ steps.versions.outputs.cryptomator_latest }}`
+          - Supercronic: `${{ steps.versions.outputs.supercronic_current }}` to `${{ steps.versions.outputs.supercronic_latest }}`
           - Rclone: `${{ steps.versions.outputs.rclone_current }}` to `${{ steps.versions.outputs.rclone_latest }}`

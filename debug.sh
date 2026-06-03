@@ -6,6 +6,7 @@ DOCKER_FILE=Dockerfile
 IMAGE_NAME=cryptomator-vault-sync:dev
 DOCKER_PLATFORM=linux/amd64 # linux/amd64 linux/arm64/v8
 CRYPTOMATOR_CLI_RELEASE=0.6.2
+SUPERCRONIC_RELEASE=0.2.45
 RCLONE_RELEASE=1.74.2
 
 mkdir -p ./debug/sync ./debug/vault ./debug/config
@@ -13,7 +14,7 @@ mkdir -p ./debug/sync ./debug/vault ./debug/config
 # Create Rclone config
 # docker run --rm -it -v ./debug/config:/config rclone/rclone config --config /config/rclone.conf
 
-docker buildx build --load --progress=plain --platform ${DOCKER_PLATFORM} --build-arg CRYPTOMATOR_CLI_RELEASE=${CRYPTOMATOR_CLI_RELEASE} --build-arg RCLONE_RELEASE=${RCLONE_RELEASE} -f ${DOCKER_FILE} -t ${IMAGE_NAME} . && \
+docker buildx build --load --progress=plain --platform ${DOCKER_PLATFORM} --build-arg CRYPTOMATOR_CLI_RELEASE=${CRYPTOMATOR_CLI_RELEASE} --build-arg RCLONE_RELEASE=${RCLONE_RELEASE} --build-arg SUPERCRONIC_RELEASE=${SUPERCRONIC_RELEASE} -f ${DOCKER_FILE} -t ${IMAGE_NAME} . && \
   docker run --rm -it --platform ${DOCKER_PLATFORM} \
     --env-file ./debug/.env \
     -v ./debug/sync:/sync:ro \

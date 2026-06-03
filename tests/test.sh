@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-cd "$(dirname "$0")" || exit 1
+cd "$(dirname "$0")/.." || exit 1
 
 IMAGE_NAME=cryptomator-vault-sync:test
 VAULT_PASSWORD=cryptomator-vault-sync
@@ -86,7 +85,6 @@ docker_run_without_cleanup() {
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
     --security-opt apparmor:unconfined \
-    -e SYNC_INTERVAL_MINUTES=0 \
     "$@" \
     "$IMAGE_NAME"
   exit_code="$?"
@@ -175,11 +173,20 @@ trap cleanup EXIT
 log "Preparing test directories and files..."
 docker_cleanup
 
+log "TEST: common.sh syntax check"
+bash -n scripts/common.sh
+
+log "TEST: config.sh syntax check"
+bash -n scripts/config.sh
+
 log "TEST: run.sh syntax check"
-bash -n run.sh
+bash -n scripts/run.sh
+
+log "TEST: sync.sh syntax check"
+bash -n scripts/sync.sh
 
 log "TEST: healthcheck.sh syntax check"
-bash -n healthcheck.sh
+bash -n scripts/healthcheck.sh
 
 log "Building test image..."
 docker buildx build --load --progress=plain --no-cache -t "$IMAGE_NAME" .
@@ -188,42 +195,42 @@ log "TEST: Healthcheck one-shot mode"
 docker_cleanup
 assert_exit_code 0 \
   docker_run_healthcheck \
-    -e SYNC_INTERVAL_MINUTES=0
+    -e SYNC_CRON=
 
 log "TEST: Healthcheck starting status"
 docker_cleanup
 printf '2026-05-30 22:10:00 starting\n' > ./tests/state/current-status
 assert_exit_code 0 \
   docker_run_healthcheck \
-    -e SYNC_INTERVAL_MINUTES=1
+    -e SYNC_CRON="*/5 * * * *"
 
 log "TEST: Healthcheck idle status"
 docker_cleanup
 printf '2026-05-30 22:10:00 idle\n' > ./tests/state/current-status
 assert_exit_code 0 \
   docker_run_healthcheck \
-    -e SYNC_INTERVAL_MINUTES=1
+    -e SYNC_CRON="*/5 * * * *"
 
 log "TEST: Healthcheck upstream-error status"
 docker_cleanup
 printf '2026-05-30 22:10:00 upstream-error\n' > ./tests/state/current-status
 assert_exit_code 1 \
   docker_run_healthcheck \
-    -e SYNC_INTERVAL_MINUTES=1
+    -e SYNC_CRON="*/5 * * * *"
 
 log "TEST: Healthcheck stopped status"
 docker_cleanup
 printf '2026-05-30 22:10:00 stopped\n' > ./tests/state/current-status
 assert_exit_code 0 \
   docker_run_healthcheck \
-    -e SYNC_INTERVAL_MINUTES=1
+    -e SYNC_CRON="*/5 * * * *"
 
 log "TEST: Healthcheck unknown status"
 docker_cleanup
 printf '2026-05-30 22:10:00 unknown\n' > ./tests/state/current-status
 assert_exit_code 1 \
   docker_run_healthcheck \
-    -e SYNC_INTERVAL_MINUTES=1
+    -e SYNC_CRON="*/5 * * * *"
 
 log "TEST: Missing vault password"
 assert_exit_code 2 \
@@ -317,13 +324,21 @@ assert_exit_code 2 \
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "RSYNC_EXCLUDE_FILE does not exist"
 
-log "TEST: Invalid SYNC_INTERVAL_MINUTES"
+log "TEST: Removed SYNC_INTERVAL_MINUTES"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e SYNC_INTERVAL_MINUTES=invalid
+    -e SYNC_INTERVAL_MINUTES=5
 assert_file_contains_status ./tests/state/current-status failed
-assert_file_contains_text ./tests/state/last-error "SYNC_INTERVAL_MINUTES must be a non-negative integer"
+assert_file_contains_text ./tests/state/last-error "SYNC_INTERVAL_MINUTES has been removed"
+
+log "TEST: Invalid SYNC_CRON"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e SYNC_CRON="invalid"
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_contains_text ./tests/state/last-error "SYNC_CRON must use the standard 5-field format"
 
 log "TEST: Invalid MOUNT_TIMEOUT_SECONDS"
 assert_exit_code 2 \
@@ -340,6 +355,15 @@ assert_exit_code 2 \
     -e UPSTREAM_ENABLED=invalid
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "UPSTREAM_ENABLED must be true or false"
+
+log "TEST: Invalid UPSTREAM_CHECK"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_CHECK=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
 
 log "TEST: Invalid UPSTREAM_FAIL_ACTION"
 assert_exit_code 2 \
@@ -515,6 +539,7 @@ assert_exit_code 0 \
   docker_run_without_cleanup \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_FAIL_ACTION=exit \
     -e UPSTREAM_DESTINATIONS=remote:temp-vault
 after="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before" == "$after" ]]; then
@@ -557,6 +582,24 @@ if [[ "$before_a" == "$after_a" ]]; then
 fi
 if [[ "$before_b" == "$after_b" ]]; then
   exit_failed "FAILED: Remote B did not change after sync"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: One-shot vault rclone copy with upstream check"
+docker_cleanup
+before="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from upstream check test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_CHECK=true \
+    -e UPSTREAM_DESTINATIONS=remote:temp-vault
+
+after="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" == "$after" ]]; then
+  exit_failed "FAILED: Remote did not change after upstream sync with check"
 fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success

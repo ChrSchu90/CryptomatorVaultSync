@@ -12,7 +12,7 @@ services:
       - apparmor:unconfined
     environment:
       CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password
-      SYNC_INTERVAL_MINUTES: 5
+      SYNC_CRON: "*/5 * * * *"
       RSYNC_DELETE: false
       RSYNC_EXCLUDE_FILE: /config/rsync-exclude.txt
       UPSTREAM_ENABLED: false

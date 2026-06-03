@@ -2,8 +2,8 @@ services:
   cryptomator-vault-sync:
     image: ghcr.io/chrschu90/cryptomator-vault-sync:1
     container_name: cryptomator-vault-sync
-    #restart: unless-stopped                                    # Recommended for continuous mode
-    #restart: no                                                # Recommended for one-shot/scheduled runs
+    #restart: unless-stopped                                    # Recommended for scheduled mode
+    #restart: no                                                # Recommended for one-shot runs
     network_mode: none                                          # Recommended for `UPSTREAM_ENABLED=false`
     cap_add:
       - SYS_ADMIN                                               # Required
@@ -18,13 +18,14 @@ services:
       VAULT_ENCRYPTED_DIR: /vault-encrypted                     # Optional [default=/vault-encrypted]
       CRYPTOMATOR_MOUNT_MODE: auto                              # Optional [default=auto] fuse, webdav, auto
       MOUNT_TIMEOUT_SECONDS: 60                                 # Optional [default=60]
-      SYNC_INTERVAL_MINUTES: 0                                  # Optional [default=0] 0=one-time
+      SYNC_CRON: ""                                             # Optional [default=] empty=one-shot, cron expression=scheduled mode
       RSYNC_DELETE: false                                       # Optional [default=false] Do not enable unless /sync is intended to be the authoritative source!
       RSYNC_EXCLUDE_FILE: /config/rsync-exclude.txt             # Optional [default=] file that is used for rsync --exclude-from "$RSYNC_EXCLUDE_FILE"
       RSYNC_ARGS: '-rtvi --no-owner --no-group --no-perms'      # Optional [default=-rtvi --no-owner --no-group --no-perms]
       RSYNC_EXTRA_ARGS:                                         # Optional [default=]
       UPSTREAM_ENABLED: false                                   # Optional [default=false]
-      UPSTREAM_FAIL_ACTION: exit                                # Optional [default=exit]
+      UPSTREAM_CHECK: false                                     # Optional [default=false] run rclone check after successful upstream sync/copy
+      UPSTREAM_FAIL_ACTION: continue                            # Optional [default=continue]
       UPSTREAM_MODE: sync                                       # Optional [default=sync] sync (one-way local vault -> cloud), copy (copy new/changed files local vault -> cloud, no deletes)
       UPSTREAM_DESTINATIONS: remote:CryptomatorVault            # Required if UPSTREAM_ENABLED=true; remote must match a section in rclone.conf
       UPSTREAM_CONFIG: /config/rclone.conf                      # Optional [default=/config/rclone.conf]

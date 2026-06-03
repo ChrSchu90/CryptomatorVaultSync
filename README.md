@@ -40,7 +40,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
 - [🌐 Network mode](#-network-mode)
 - [🔄 Sync modes](#-sync-modes)
   - [⚡ One-shot mode](#-one-shot-mode)
-  - [♾️ Continuous mode](#️-continuous-mode)
+  - [♾️ Scheduled mode](#️-scheduled-mode)
   - [🧪 Dry-run mode](#-dry-run-mode)
 - [⬆️ Rclone upstream sync](#️-rclone-upstream-sync)
   - [`sync`](#upstream_mode)
@@ -209,7 +209,7 @@ The container writes three files:
 
 | File | Description |
 |---|---|
-| `current-status` | Current container status. Used by the healthcheck in continuous mode. |
+| `current-status` | Current container status. Used by the healthcheck in scheduled mode. |
 | `last-success` | Timestamp of the last fully successful real sync cycle. Not updated during dry-run mode. |
 | `last-error` | Timestamp and message of the last error. |
 
@@ -253,9 +253,10 @@ Possible `current-status` values:
 | `RSYNC_ARGS` | `-rtvi --no-owner --no-group --no-perms` | Base rsync arguments. |
 | `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |
 | `MOUNT_TIMEOUT_SECONDS` | `60` | Timeout for mount operations. |
-| `SYNC_INTERVAL_MINUTES` | `0` | `0` enables one-shot mode. Any positive value enables continuous mode. |
+| `SYNC_CRON` | empty | Cron schedule for scheduled mode. Leave empty for one-shot mode. Uses standard 5-field cron syntax, for example `*/5 * * * *`. |
 | `UPSTREAM_ENABLED` | `false` | Enable optional rclone upstream sync after the encrypted vault has been updated. |
-| `UPSTREAM_FAIL_ACTION` | `exit` | Behavior when rclone fails. `exit` stops the container; `continue` keeps continuous mode running and retries on the next cycle. One-shot mode always exits on upstream errors. |
+| `UPSTREAM_CHECK` | `false` | If `true`, runs `rclone check` after each successful upstream sync/copy destination. This verifies that source and destination match, but can increase runtime and provider API usage. |
+| `UPSTREAM_FAIL_ACTION` | `continue` | Behavior when rclone or upstream check fails. `continue` marks the status as `upstream-error` and retries on the next scheduled cycle. `exit` marks the sync cycle as failed. One-shot mode always exits on upstream errors. |
 | `UPSTREAM_MODE` | `sync` | rclone operation mode. `sync` mirrors the local encrypted vault to the destination, including deletions. This is the recommended mode when the upstream destination should be an exact copy of the local vault. `copy` uploads new and changed files without deleting remote files, but may leave old encrypted vault files at the destination. |
 | `UPSTREAM_DESTINATIONS` | empty | One or more rclone destination paths separated by `|`, for example `onedrive:Vault|gdrive:Vault`. |
 | `UPSTREAM_CONFIG` | `/config/rclone.conf` | Path to the rclone configuration file. |
@@ -302,6 +303,16 @@ RSYNC_EXTRA_ARGS=--max-size=500M
 
 # Limit bandwidth to approximately 5000 KiB/s
 RSYNC_EXTRA_ARGS=--bwlimit=5000
+```
+
+### Upstream check
+
+When enabled, the container runs `rclone check` for each upstream destination after `rclone sync` or `rclone copy` completed successfully.
+
+This can help detect incomplete or inconsistent upstream transfers, but it may increase runtime and provider API usage. For cloud providers with strict rate limits, consider reducing rclone concurrency via `UPSTREAM_EXTRA_ARGS`.
+
+```env
+UPSTREAM_CHECK=true
 ```
 
 ### `UPSTREAM_MODE`
@@ -448,13 +459,13 @@ Use Docker's default bridge network or omit `network_mode`.
 
 ### ⚡ One-shot mode
 
-Set:
+Leave `SYNC_CRON` empty:
 
 ```env
-SYNC_INTERVAL_MINUTES=0
+SYNC_CRON=
 ```
 
-The container will:
+The container runs one sync cycle and exits.
 
 1. Unlock the vault.
 2. Sync files from `/sync` into the decrypted vault view.
@@ -464,15 +475,23 @@ The container will:
 
 Use this mode with an external scheduler such as cron or Synology Task Scheduler.
 
-### ♾️ Continuous mode
+### ♾️ Scheduled mode
 
-Set a positive interval:
+Scheduled mode is handled by [supercronic](https://github.com/aptible/supercronic) inside the container. Each scheduled run starts `/sync.sh`. Sync cycles are protected against overlap by a lock file, so a scheduled run is skipped if the previous sync cycle is still running.
+
+Set a cron expression:
 
 ```env
-SYNC_INTERVAL_MINUTES=5
+SYNC_CRON=*/5 * * * *
 ```
 
-`SYNC_INTERVAL_MINUTES` defines the delay between completed sync cycles, not a fixed cron-like schedule.
+In Docker Compose, quote cron expressions:
+
+```yml
+SYNC_CRON: "*/5 * * * *"
+```
+
+The container starts a sync cycle according to the cron schedule. Sync cycles are protected against overlap. If a previous cycle is still running when the next scheduled run starts, that run is skipped.
 
 Each cycle will:
 
@@ -560,7 +579,7 @@ UPSTREAM_DESTINATIONS=gdrive:Vaults/Backup Vault
 
 In one-shot mode, the container exits after one sync cycle. The container exit code is the primary status signal.
 
-In continuous mode, Docker runs `/healthcheck.sh`. The healthcheck reads `/state/current-status`:
+In scheduled mode, Docker runs `/healthcheck.sh`. The healthcheck reads `/state/current-status`:
 
 - `starting`, `running`, `idle`, and `stopped` are healthy states.
 - unknown states, `failed`, and `upstream-error` are unhealthy states.
@@ -572,9 +591,9 @@ Recommended restart policies:
 | Mode | Restart policy | Reason |
 |---|---|---|
 | One-shot with external scheduler | `restart: "no"` | The scheduler should see the container exit code. |
-| Continuous mode | `restart: unless-stopped` | Docker can restart the container after fatal runtime errors. |
+| Scheduled mode | `restart: unless-stopped` | Docker can restart the container after fatal runtime errors. |
 
-If `UPSTREAM_FAIL_ACTION=continue` is set in continuous mode, upstream errors do not stop the container. Instead, the container writes `upstream-error` to `/state/current-status`, writes the error to `/state/last-error`, and retries during the next sync cycle.
+If `UPSTREAM_FAIL_ACTION=continue` is set in scheduled mode, upstream errors do not stop the container. Instead, the container writes `upstream-error` to `/state/current-status`, writes the error to `/state/last-error`, and retries during the next sync cycle.
 
 ## 🏷️ Image tags
 
@@ -640,19 +659,46 @@ If the upstream sync is handled by the host, for example Synology Cloud Sync, al
 
 ## 🚧 Development and testing
 
+The container entrypoint and sync logic are split into multiple shell scripts:
+
+| File | Purpose |
+|---|---|
+| `scripts/common.sh` | Shared helper functions for logging, timestamps, state files, exit handling, and small utility functions. |
+| `scripts/config.sh` | Central place for defaults, configuration validation, runtime path validation, and vault password loading. |
+| `scripts/run.sh` | Container entrypoint. Selects one-shot or scheduled mode, validates startup configuration, and starts `supercronic` when `SYNC_CRON` is set. |
+| `scripts/sync.sh` | Executes one complete sync cycle: validates runtime paths, loads the vault password, mounts the vault, runs rsync, unmounts the vault, and optionally runs rclone/upstream checks. |
+| `scripts/healthcheck.sh` | Docker healthcheck script. In scheduled mode, reads `/state/current-status` and maps known states to healthy or unhealthy. |
+| `scripts/debug.sh` | Local helper script for manual image builds, debug runs, and interactive testing during development. |
+
+For manual debugging, `sync.sh` can also be executed directly inside a running container to trigger one sync cycle.
+
+```bash
+docker exec -it cryptomator-vault-sync /sync.sh
+```
+
+This does not start the scheduler. It only runs one sync cycle. If another sync cycle is already running, the internal lock prevents overlapping runs.
+
 Run the local test suite with:
 
 ```bash
-./test.sh
+./tests/test.sh
 ```
 
 The test script:
 
-- Checks shell syntax
-- Builds the Docker image without cache
-- Validates configuration errors
-- Runs one-shot sync integration tests
-- Tests rclone/upstream behavior
-- Tests state files and healthcheck behavior
+- Checks shell syntax for all project scripts:
+  - common.sh
+  - config.sh
+  - run.sh
+  - sync.sh
+  - healthcheck.sh
+- Builds the Docker image without cache.
+- Validates configuration errors.
+- Runs one-shot sync integration tests.
+- Tests scheduled-mode configuration and healthcheck behavior.
+- Tests rclone/upstream behavior.
+- Tests optional upstream verification with UPSTREAM_CHECK=true.
+- Tests state files and status handling.
+
 
 The tests require Docker Buildx and a host environment that supports the required container mount permissions.
