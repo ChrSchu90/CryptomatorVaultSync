@@ -466,6 +466,8 @@ Use this mode with an external scheduler such as cron or Synology Task Scheduler
 
 ### ♾️ Scheduled mode
 
+Scheduled mode is handled by [supercronic](https://github.com/aptible/supercronic) inside the container. Each scheduled run starts `/sync.sh`. Sync cycles are protected against overlap by a lock file, so a scheduled run is skipped if the previous sync cycle is still running.
+
 Set a cron expression:
 
 ```env
