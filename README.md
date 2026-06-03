@@ -663,12 +663,12 @@ The container entrypoint and sync logic are split into multiple shell scripts:
 
 | File | Purpose |
 |---|---|
-| `common.sh` | Shared helper functions for logging, timestamps, state files, exit handling, and small utility functions. |
-| `config.sh` | Central place for defaults, configuration validation, runtime path validation, and vault password loading. |
-| `run.sh` | Container entrypoint. Selects one-shot or scheduled mode, validates startup configuration, and starts `supercronic` when `SYNC_CRON` is set. |
-| `sync.sh` | Executes one complete sync cycle: validates runtime paths, loads the vault password, mounts the vault, runs rsync, unmounts the vault, and optionally runs rclone/upstream checks. |
-| `healthcheck.sh` | Docker healthcheck script. In scheduled mode, reads `/state/current-status` and maps known states to healthy or unhealthy. |
-| `debug.sh` | Local helper script for manual image builds, debug runs, and interactive testing during development. |
+| `scripts/common.sh` | Shared helper functions for logging, timestamps, state files, exit handling, and small utility functions. |
+| `scripts/config.sh` | Central place for defaults, configuration validation, runtime path validation, and vault password loading. |
+| `scripts/run.sh` | Container entrypoint. Selects one-shot or scheduled mode, validates startup configuration, and starts `supercronic` when `SYNC_CRON` is set. |
+| `scripts/sync.sh` | Executes one complete sync cycle: validates runtime paths, loads the vault password, mounts the vault, runs rsync, unmounts the vault, and optionally runs rclone/upstream checks. |
+| `scripts/healthcheck.sh` | Docker healthcheck script. In scheduled mode, reads `/state/current-status` and maps known states to healthy or unhealthy. |
+| `scripts/debug.sh` | Local helper script for manual image builds, debug runs, and interactive testing during development. |
 
 For manual debugging, `sync.sh` can also be executed directly inside a running container to trigger one sync cycle.
 
@@ -681,7 +681,7 @@ This does not start the scheduler. It only runs one sync cycle. If another sync 
 Run the local test suite with:
 
 ```bash
-./test.sh
+./tests/test.sh
 ```
 
 The test script:

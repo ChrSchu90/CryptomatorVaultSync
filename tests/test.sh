@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-cd "$(dirname "$0")" || exit 1
+cd "$(dirname "$0")/.." || exit 1
 
 IMAGE_NAME=cryptomator-vault-sync:test
 VAULT_PASSWORD=cryptomator-vault-sync
@@ -175,19 +174,19 @@ log "Preparing test directories and files..."
 docker_cleanup
 
 log "TEST: common.sh syntax check"
-bash -n common.sh
+bash -n scripts/common.sh
 
 log "TEST: config.sh syntax check"
-bash -n config.sh
+bash -n scripts/config.sh
 
 log "TEST: run.sh syntax check"
-bash -n run.sh
+bash -n scripts/run.sh
 
 log "TEST: sync.sh syntax check"
-bash -n sync.sh
+bash -n scripts/sync.sh
 
 log "TEST: healthcheck.sh syntax check"
-bash -n healthcheck.sh
+bash -n scripts/healthcheck.sh
 
 log "Building test image..."
 docker buildx build --load --progress=plain --no-cache -t "$IMAGE_NAME" .

@@ -75,11 +75,11 @@ RUN set -eux; \
     rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
 
 # Add project binaries
-COPY --chmod=755 common.sh /common.sh
-COPY --chmod=755 config.sh /config.sh
-COPY --chmod=755 run.sh /run.sh
-COPY --chmod=755 sync.sh /sync.sh
-COPY --chmod=755 healthcheck.sh /healthcheck.sh
+COPY --chmod=755 scripts/common.sh /common.sh
+COPY --chmod=755 scripts/config.sh /config.sh
+COPY --chmod=755 scripts/run.sh /run.sh
+COPY --chmod=755 scripts/sync.sh /sync.sh
+COPY --chmod=755 scripts/healthcheck.sh /healthcheck.sh
 
 # Healthcheck is only relevant for scheduled mode, check is ignored internally in one-shot mode
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
