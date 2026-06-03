@@ -659,6 +659,25 @@ If the upstream sync is handled by the host, for example Synology Cloud Sync, al
 
 ## 🚧 Development and testing
 
+The container entrypoint and sync logic are split into multiple shell scripts:
+
+| File | Purpose |
+|---|---|
+| `common.sh` | Shared helper functions for logging, timestamps, state files, exit handling, and small utility functions. |
+| `config.sh` | Central place for defaults, configuration validation, runtime path validation, and vault password loading. |
+| `run.sh` | Container entrypoint. Selects one-shot or scheduled mode, validates startup configuration, and starts `supercronic` when `SYNC_CRON` is set. |
+| `sync.sh` | Executes one complete sync cycle: validates runtime paths, loads the vault password, mounts the vault, runs rsync, unmounts the vault, and optionally runs rclone/upstream checks. |
+| `healthcheck.sh` | Docker healthcheck script. In scheduled mode, reads `/state/current-status` and maps known states to healthy or unhealthy. |
+| `debug.sh` | Local helper script for manual image builds, debug runs, and interactive testing during development. |
+
+For manual debugging, `sync.sh` can also be executed directly inside a running container to trigger one sync cycle.
+
+```bash
+docker exec -it cryptomator-vault-sync /sync.sh
+```
+
+This does not start the scheduler. It only runs one sync cycle. If another sync cycle is already running, the internal lock prevents overlapping runs.
+
 Run the local test suite with:
 
 ```bash
@@ -667,11 +686,19 @@ Run the local test suite with:
 
 The test script:
 
-- Checks shell syntax
-- Builds the Docker image without cache
-- Validates configuration errors
-- Runs one-shot sync integration tests
-- Tests rclone/upstream behavior
-- Tests state files and healthcheck behavior
+- Checks shell syntax for all project scripts:
+  - common.sh
+  - config.sh
+  - run.sh
+  - sync.sh
+  - healthcheck.sh
+- Builds the Docker image without cache.
+- Validates configuration errors.
+- Runs one-shot sync integration tests.
+- Tests scheduled-mode configuration and healthcheck behavior.
+- Tests rclone/upstream behavior.
+- Tests optional upstream verification with UPSTREAM_CHECK=true.
+- Tests state files and status handling.
+
 
 The tests require Docker Buildx and a host environment that supports the required container mount permissions.
