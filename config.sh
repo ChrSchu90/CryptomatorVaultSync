@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 load_config_defaults() {
   DRY_RUN="${DRY_RUN:-false}"

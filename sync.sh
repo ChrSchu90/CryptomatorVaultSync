@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# shellcheck disable=SC1091
 . /common.sh
+# shellcheck disable=SC1091
 . /config.sh
 
 load_config_defaults

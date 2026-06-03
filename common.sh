@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
+# shellcheck disable=SC2034
 EXIT_OK=0
+# shellcheck disable=SC2034
 EXIT_GENERAL_ERROR=1
+# shellcheck disable=SC2034
 EXIT_CONFIG_ERROR=2
+# shellcheck disable=SC2034
 EXIT_LOCK_SKIPPED=75
 
 EXIT_IS_FAILURE="${EXIT_IS_FAILURE:-false}"
