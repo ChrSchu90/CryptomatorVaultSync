@@ -357,6 +357,15 @@ assert_exit_code 2 \
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "UPSTREAM_ENABLED must be true or false"
 
+log "TEST: Invalid UPSTREAM_CHECK"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_CHECK=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+
 log "TEST: Invalid UPSTREAM_FAIL_ACTION"
 assert_exit_code 2 \
   docker_run \
@@ -531,6 +540,7 @@ assert_exit_code 0 \
   docker_run_without_cleanup \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
     -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_FAIL_ACTION=exit \
     -e UPSTREAM_DESTINATIONS=remote:temp-vault
 after="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
 if [[ "$before" == "$after" ]]; then
@@ -573,6 +583,24 @@ if [[ "$before_a" == "$after_a" ]]; then
 fi
 if [[ "$before_b" == "$after_b" ]]; then
   exit_failed "FAILED: Remote B did not change after sync"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: One-shot vault rclone copy with upstream check"
+docker_cleanup
+before="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+echo "hello from upstream check test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_CHECK=true \
+    -e UPSTREAM_DESTINATIONS=remote:temp-vault
+
+after="$(find ./tests/rclone-remote -type f -printf '%P %s\n' | sort | sha256sum | awk '{print $1}')"
+if [[ "$before" == "$after" ]]; then
+  exit_failed "FAILED: Remote did not change after upstream sync with check"
 fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success

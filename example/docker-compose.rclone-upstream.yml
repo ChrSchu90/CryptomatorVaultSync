@@ -15,7 +15,8 @@ services:
       RSYNC_DELETE: false
       RSYNC_EXCLUDE_FILE: /config/rsync-exclude.txt
       UPSTREAM_ENABLED: true
-      UPSTREAM_FAIL_ACTION: exit
+      #UPSTREAM_CHECK: true # Optional rclone check after successful upstream sync/copy
+      UPSTREAM_FAIL_ACTION: continue
       UPSTREAM_MODE: sync
       UPSTREAM_DESTINATIONS: remote:CryptomatorVault
       UPSTREAM_CONFIG: /config/rclone.conf

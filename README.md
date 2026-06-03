@@ -255,7 +255,8 @@ Possible `current-status` values:
 | `MOUNT_TIMEOUT_SECONDS` | `60` | Timeout for mount operations. |
 | `SYNC_CRON` | empty | Cron schedule for scheduled mode. Leave empty for one-shot mode. Uses standard 5-field cron syntax, for example `*/5 * * * *`. |
 | `UPSTREAM_ENABLED` | `false` | Enable optional rclone upstream sync after the encrypted vault has been updated. |
-| `UPSTREAM_FAIL_ACTION` | `exit` | Behavior when rclone fails. `exit` stops the container; `continue` keeps scheduled mode running and retries on the next cycle. One-shot mode always exits on upstream errors. |
+| `UPSTREAM_CHECK` | `false` | If `true`, runs `rclone check` after each successful upstream sync/copy destination. This verifies that source and destination match, but can increase runtime and provider API usage. |
+| `UPSTREAM_FAIL_ACTION` | `continue` | Behavior when rclone or upstream check fails. `continue` marks the status as `upstream-error` and retries on the next scheduled cycle. `exit` marks the sync cycle as failed. One-shot mode always exits on upstream errors. |
 | `UPSTREAM_MODE` | `sync` | rclone operation mode. `sync` mirrors the local encrypted vault to the destination, including deletions. This is the recommended mode when the upstream destination should be an exact copy of the local vault. `copy` uploads new and changed files without deleting remote files, but may leave old encrypted vault files at the destination. |
 | `UPSTREAM_DESTINATIONS` | empty | One or more rclone destination paths separated by `|`, for example `onedrive:Vault|gdrive:Vault`. |
 | `UPSTREAM_CONFIG` | `/config/rclone.conf` | Path to the rclone configuration file. |
@@ -302,6 +303,16 @@ RSYNC_EXTRA_ARGS=--max-size=500M
 
 # Limit bandwidth to approximately 5000 KiB/s
 RSYNC_EXTRA_ARGS=--bwlimit=5000
+```
+
+### Upstream check
+
+When enabled, the container runs `rclone check` for each upstream destination after `rclone sync` or `rclone copy` completed successfully.
+
+This can help detect incomplete or inconsistent upstream transfers, but it may increase runtime and provider API usage. For cloud providers with strict rate limits, consider reducing rclone concurrency via `UPSTREAM_EXTRA_ARGS`.
+
+```env
+UPSTREAM_CHECK=true
 ```
 
 ### `UPSTREAM_MODE`

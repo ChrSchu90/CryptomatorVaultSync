@@ -301,6 +301,32 @@ handle_upstream_error() {
   exit_failed "$EXIT_GENERAL_ERROR" "$message"
 }
 
+run_rclone_check() {
+  local destination="$1"
+  local rclone_check_exit_code=0
+
+  if [[ "$UPSTREAM_CHECK" != "true" ]]; then
+    return 0
+  fi
+
+  log_info "Running rclone check $VAULT_ENCRYPTED_DIR -> $destination"
+
+  set +e
+  # shellcheck disable=SC2086
+  rclone check "$VAULT_ENCRYPTED_DIR" "$destination" \
+    --config "$UPSTREAM_CONFIG" \
+    $UPSTREAM_EXTRA_ARGS
+  rclone_check_exit_code="$?"
+  set -e
+
+  if [[ "$rclone_check_exit_code" -ne 0 ]]; then
+    handle_upstream_error "Rclone check failed for destination '$destination' with exit code $rclone_check_exit_code"
+    return 1
+  fi
+
+  log_info "Rclone check finished for destination: $destination"
+}
+
 run_rclone() {
   if [[ "$UPSTREAM_ENABLED" != "true" ]]; then
     return 0
@@ -343,6 +369,10 @@ run_rclone() {
     fi
 
     log_info "Rclone finished for destination: $destination"
+    
+    if ! run_rclone_check "$destination"; then
+      return 1
+    fi
   done
 
   if [[ "$destination_count" -eq 0 ]]; then

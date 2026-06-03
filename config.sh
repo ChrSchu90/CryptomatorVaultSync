@@ -22,12 +22,13 @@ load_config_defaults() {
   RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
 
   UPSTREAM_ENABLED="${UPSTREAM_ENABLED:-false}"
-  UPSTREAM_FAIL_ACTION="${UPSTREAM_FAIL_ACTION:-exit}"
+  UPSTREAM_FAIL_ACTION="${UPSTREAM_FAIL_ACTION:-continue}"
   UPSTREAM_MODE="${UPSTREAM_MODE:-sync}"
   UPSTREAM_DESTINATIONS="${UPSTREAM_DESTINATIONS:-}"
   UPSTREAM_CONFIG="${UPSTREAM_CONFIG:-/config/rclone.conf}"
   UPSTREAM_EXTRA_ARGS="${UPSTREAM_EXTRA_ARGS:-}"
   UPSTREAM_START_DELAY_SECONDS="${UPSTREAM_START_DELAY_SECONDS:-0}"
+  UPSTREAM_CHECK="${UPSTREAM_CHECK:-false}"
 }
 
 require_dir() {
@@ -170,6 +171,10 @@ validate_config() {
   if [[ "$UPSTREAM_ENABLED" == "true" ]]; then
     if ! has_valid_upstream_destination; then
       exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_DESTINATIONS is required when UPSTREAM_ENABLED=true"
+    fi
+
+    if [[ "$UPSTREAM_CHECK" != "true" && "$UPSTREAM_CHECK" != "false" ]]; then
+      exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_CHECK must be true or false"
     fi
 
     if [[ ! -f "$UPSTREAM_CONFIG" ]]; then
