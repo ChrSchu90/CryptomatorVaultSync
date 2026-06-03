@@ -3,7 +3,7 @@ services:
     image: ghcr.io/chrschu90/cryptomator-vault-sync:1
     container_name: cryptomator-vault-sync
     #restart: unless-stopped                                    # Recommended for scheduled mode
-    #restart: no                                                # Recommended for one-shot/scheduled runs
+    #restart: no                                                # Recommended for one-shot runs
     network_mode: none                                          # Recommended for `UPSTREAM_ENABLED=false`
     cap_add:
       - SYS_ADMIN                                               # Required
