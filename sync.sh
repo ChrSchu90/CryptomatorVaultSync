@@ -7,6 +7,16 @@ set -Eeuo pipefail
 load_config_defaults
 
 CRYPTOMATOR_PID=""
+LOCK_FILE="${LOCK_FILE:-/tmp/cryptomator-vault-sync.lock}"
+
+acquire_sync_lock() {
+  exec 9>"$LOCK_FILE"
+
+  if ! flock -n 9; then
+    log_warn "Previous sync cycle is still running. Skipping this sync cycle."
+    exit "$EXIT_OK"
+  fi
+}
 
 cleanup_resources() {
   log_info "Cleaning up..."
@@ -363,6 +373,7 @@ sync_cycle() {
 }
 
 main() {
+  acquire_sync_lock
   validate_config
   validate_sync_runtime
   load_password

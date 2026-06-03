@@ -23,29 +23,10 @@ cleanup_scheduler() {
   fi
 }
 
-run_scheduled_sync() {
-  load_config_defaults
-  validate_config
-
-  local status=0
-
-  set +e
-  flock -n -E "$EXIT_LOCK_SKIPPED" "$SYNC_LOCK_FILE" /sync.sh
-  status="$?"
-  set -e
-
-  if [[ "$status" -eq "$EXIT_LOCK_SKIPPED" ]]; then
-    log_warn "Previous sync cycle is still running. Skipping this scheduled run."
-    return 0
-  fi
-
-  return "$status"
-}
-
 run_cron() {
   log_info "Cron sync enabled. Schedule: $SYNC_CRON"
 
-  printf '%s /bin/sh -c '\''/run.sh --scheduled-sync || kill -TERM 1'\''\n' "$SYNC_CRON" > "$CRON_FILE"
+  printf '%s /sync.sh\n' "$SYNC_CRON" > "$CRON_FILE"
 
   trap cleanup_scheduler EXIT
   trap 'cleanup_scheduler; exit "$EXIT_OK"' INT
@@ -57,24 +38,15 @@ run_cron() {
 }
 
 main() {
-  case "${1:-}" in
-    --scheduled-sync)
-      run_scheduled_sync
-      ;;
-    --help|-h)
-      printf 'Usage: /run.sh [--scheduled-sync]\n'
-      ;;
-    *)
-      write_status "current-status" "starting"
-      validate_config
+  write_status "current-status" "starting"
+  validate_config
 
-      if [[ -z "$SYNC_CRON" ]]; then
-        exec /sync.sh
-      fi
+  if [[ -z "$SYNC_CRON" ]]; then
+    log_info "One-shot sync enabled."
+    exec /sync.sh
+  fi
 
-      run_cron
-      ;;
-  esac
+  run_cron
 }
 
 main "$@"
