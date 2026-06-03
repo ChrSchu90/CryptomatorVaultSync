@@ -34,7 +34,7 @@ run_cron() {
   trap 'cleanup_scheduler; exit "$EXIT_OK"' INT
   trap 'cleanup_scheduler; exit "$EXIT_OK"' TERM
 
-  supercronic -passthrough-logs "$CRON_FILE" &
+  supercronic -no-reap -passthrough-logs "$CRON_FILE" &
   SUPERCRONIC_PID="$!"
   wait "$SUPERCRONIC_PID"
 }
