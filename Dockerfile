@@ -19,7 +19,7 @@ RUN set -eux; \
         ca-certificates \
         fuse3 \
         davfs2 \
-        rsync \ 
+        rsync \
         util-linux; \
     apt-get autoremove -y; \
     apt-get clean; \
@@ -81,7 +81,7 @@ COPY --chmod=755 run.sh /run.sh
 COPY --chmod=755 sync.sh /sync.sh
 COPY --chmod=755 healthcheck.sh /healthcheck.sh
 
-# Healthcheck is only relevant for continuous sync mode, check is ignored internally in one-shot mode
+# Healthcheck is only relevant for scheduled mode, check is ignored internally in one-shot mode
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD ["/healthcheck.sh"]
 

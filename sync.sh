@@ -9,10 +9,10 @@ set -Eeuo pipefail
 load_config_defaults
 
 CRYPTOMATOR_PID=""
-LOCK_FILE="${LOCK_FILE:-/tmp/cryptomator-vault-sync.lock}"
+SYNC_LOCK_FILE="/tmp/cryptomator-vault-sync.lock"
 
 acquire_sync_lock() {
-  exec 9>"$LOCK_FILE"
+  exec 9>"$SYNC_LOCK_FILE"
 
   if ! flock -n 9; then
     log_warn "Previous sync cycle is still running. Skipping this sync cycle."

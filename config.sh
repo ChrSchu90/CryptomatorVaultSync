@@ -4,7 +4,6 @@ set -euo pipefail
 load_config_defaults() {
   DRY_RUN="${DRY_RUN:-false}"
   SYNC_CRON="${SYNC_CRON:-}"
-  SYNC_LOCK_FILE="${SYNC_LOCK_FILE:-/tmp/cryptomator-vault-sync.lock}"
 
   SYNC_DIR="${SYNC_DIR:-/sync}"
   STATE_DIR="${STATE_DIR:-/state}"
