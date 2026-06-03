@@ -40,7 +40,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
 - [🌐 Network mode](#-network-mode)
 - [🔄 Sync modes](#-sync-modes)
   - [⚡ One-shot mode](#-one-shot-mode)
-  - [♾️ Continuous mode](#️-continuous-mode)
+  - [♾️ Scheduled mode](#️-scheduled-mode)
   - [🧪 Dry-run mode](#-dry-run-mode)
 - [⬆️ Rclone upstream sync](#️-rclone-upstream-sync)
   - [`sync`](#upstream_mode)
@@ -209,7 +209,7 @@ The container writes three files:
 
 | File | Description |
 |---|---|
-| `current-status` | Current container status. Used by the healthcheck in continuous mode. |
+| `current-status` | Current container status. Used by the healthcheck in scheduled mode. |
 | `last-success` | Timestamp of the last fully successful real sync cycle. Not updated during dry-run mode. |
 | `last-error` | Timestamp and message of the last error. |
 
@@ -253,9 +253,9 @@ Possible `current-status` values:
 | `RSYNC_ARGS` | `-rtvi --no-owner --no-group --no-perms` | Base rsync arguments. |
 | `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |
 | `MOUNT_TIMEOUT_SECONDS` | `60` | Timeout for mount operations. |
-| `SYNC_INTERVAL_MINUTES` | `0` | `0` enables one-shot mode. Any positive value enables continuous mode. |
+| `SYNC_CRON` | empty | Cron schedule for scheduled mode. Leave empty for one-shot mode. Uses standard 5-field cron syntax, for example `*/5 * * * *`. |
 | `UPSTREAM_ENABLED` | `false` | Enable optional rclone upstream sync after the encrypted vault has been updated. |
-| `UPSTREAM_FAIL_ACTION` | `exit` | Behavior when rclone fails. `exit` stops the container; `continue` keeps continuous mode running and retries on the next cycle. One-shot mode always exits on upstream errors. |
+| `UPSTREAM_FAIL_ACTION` | `exit` | Behavior when rclone fails. `exit` stops the container; `continue` keeps scheduled mode running and retries on the next cycle. One-shot mode always exits on upstream errors. |
 | `UPSTREAM_MODE` | `sync` | rclone operation mode. `sync` mirrors the local encrypted vault to the destination, including deletions. This is the recommended mode when the upstream destination should be an exact copy of the local vault. `copy` uploads new and changed files without deleting remote files, but may leave old encrypted vault files at the destination. |
 | `UPSTREAM_DESTINATIONS` | empty | One or more rclone destination paths separated by `|`, for example `onedrive:Vault|gdrive:Vault`. |
 | `UPSTREAM_CONFIG` | `/config/rclone.conf` | Path to the rclone configuration file. |
@@ -448,13 +448,13 @@ Use Docker's default bridge network or omit `network_mode`.
 
 ### ⚡ One-shot mode
 
-Set:
+Leave `SYNC_CRON` empty:
 
 ```env
-SYNC_INTERVAL_MINUTES=0
+SYNC_CRON=
 ```
 
-The container will:
+The container runs one sync cycle and exits.
 
 1. Unlock the vault.
 2. Sync files from `/sync` into the decrypted vault view.
@@ -464,15 +464,21 @@ The container will:
 
 Use this mode with an external scheduler such as cron or Synology Task Scheduler.
 
-### ♾️ Continuous mode
+### ♾️ Scheduled mode
 
-Set a positive interval:
+Set a cron expression:
 
 ```env
-SYNC_INTERVAL_MINUTES=5
+SYNC_CRON=*/5 * * * *
 ```
 
-`SYNC_INTERVAL_MINUTES` defines the delay between completed sync cycles, not a fixed cron-like schedule.
+In Docker Compose, quote cron expressions:
+
+```yml
+SYNC_CRON: "*/5 * * * *"
+```
+
+The container starts a sync cycle according to the cron schedule. Sync cycles are protected against overlap. If a previous cycle is still running when the next scheduled run starts, that run is skipped.
 
 Each cycle will:
 
@@ -560,7 +566,7 @@ UPSTREAM_DESTINATIONS=gdrive:Vaults/Backup Vault
 
 In one-shot mode, the container exits after one sync cycle. The container exit code is the primary status signal.
 
-In continuous mode, Docker runs `/healthcheck.sh`. The healthcheck reads `/state/current-status`:
+In scheduled mode, Docker runs `/healthcheck.sh`. The healthcheck reads `/state/current-status`:
 
 - `starting`, `running`, `idle`, and `stopped` are healthy states.
 - unknown states, `failed`, and `upstream-error` are unhealthy states.
@@ -572,9 +578,9 @@ Recommended restart policies:
 | Mode | Restart policy | Reason |
 |---|---|---|
 | One-shot with external scheduler | `restart: "no"` | The scheduler should see the container exit code. |
-| Continuous mode | `restart: unless-stopped` | Docker can restart the container after fatal runtime errors. |
+| Scheduled mode | `restart: unless-stopped` | Docker can restart the container after fatal runtime errors. |
 
-If `UPSTREAM_FAIL_ACTION=continue` is set in continuous mode, upstream errors do not stop the container. Instead, the container writes `upstream-error` to `/state/current-status`, writes the error to `/state/last-error`, and retries during the next sync cycle.
+If `UPSTREAM_FAIL_ACTION=continue` is set in scheduled mode, upstream errors do not stop the container. Instead, the container writes `upstream-error` to `/state/current-status`, writes the error to `/state/last-error`, and retries during the next sync cycle.
 
 ## 🏷️ Image tags
 

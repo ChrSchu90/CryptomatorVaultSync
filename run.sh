@@ -1,614 +1,80 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-EXIT_OK=0
-EXIT_GENERAL_ERROR=1
-EXIT_CONFIG_ERROR=2
+. /common.sh
+. /config.sh
 
-DRY_RUN="${DRY_RUN:-false}"
-SYNC_DIR="${SYNC_DIR:-/sync}"
-STATE_DIR="${STATE_DIR:-/state}"
+load_config_defaults
 
-MOUNT_TIMEOUT_SECONDS="${MOUNT_TIMEOUT_SECONDS:-60}"
-VAULT_ENCRYPTED_DIR="${VAULT_ENCRYPTED_DIR:-/vault-encrypted}"
-VAULT_DECRYPTED_DIR="/vault-decrypted" # Internal temporary mount point. The host usually cannot see its contents because the mount is created inside the container namespace.
-VAULT_DECRYPTED_BASE_DEV=""
-VAULT_PASSWORD=""
+SUPERCRONIC_PID=""
+CRON_FILE="/tmp/cryptomator-vault-sync.cron"
 
-CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-auto}"
-
-RSYNC_DELETE="${RSYNC_DELETE:-false}"
-RSYNC_EXCLUDE_FILE="${RSYNC_EXCLUDE_FILE:-}"
-RSYNC_ARGS="${RSYNC_ARGS:--rtvi --no-owner --no-group --no-perms}"
-RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
-SYNC_INTERVAL_MINUTES="${SYNC_INTERVAL_MINUTES:-0}"
-
-UPSTREAM_ENABLED="${UPSTREAM_ENABLED:-false}"
-UPSTREAM_FAIL_ACTION="${UPSTREAM_FAIL_ACTION:-exit}"
-UPSTREAM_MODE="${UPSTREAM_MODE:-sync}"
-UPSTREAM_DESTINATIONS="${UPSTREAM_DESTINATIONS:-}"
-UPSTREAM_CONFIG="${UPSTREAM_CONFIG:-/config/rclone.conf}"
-UPSTREAM_EXTRA_ARGS="${UPSTREAM_EXTRA_ARGS:-}"
-UPSTREAM_START_DELAY_SECONDS="${UPSTREAM_START_DELAY_SECONDS:-0}"
-
-CRYPTOMATOR_PID=""
-EXIT_IS_FAILURE="false"
-
-trim() {
-  local value="$1"
-  value="${value#"${value%%[![:space:]]*}"}"
-  value="${value%"${value##*[![:space:]]}"}"
-  printf '%s' "$value"
-}
-
-timestamp() {
-  date '+%Y-%m-%d %H:%M:%S'
-}
-
-ensure_state_dir() {
-  mkdir -p "$STATE_DIR" 2>/dev/null || true
-}
-
-write_status() {
-  local name="$1"
-  shift || true
-  local message="$*"
-
-  ensure_state_dir
-
-  if [[ -d "$STATE_DIR" && -w "$STATE_DIR" ]]; then
-    if [[ -n "$message" ]]; then
-      printf '%s %s\n' "$(timestamp)" "$message" > "$STATE_DIR/$name"
-    else
-      printf '%s\n' "$(timestamp)" > "$STATE_DIR/$name"
-    fi
-  fi
-}
-
-log_info() {
-  printf '[%s] \033[94mINF\033[0m: %s\n' "$(timestamp)" "$*"
-}
-
-log_warn() {
-  printf '[%s] \033[93mWRN\033[0m: %s\n' "$(timestamp)" "$*"
-}
-
-log_error() {
-  printf '[%s] \033[91mERR\033[0m: %s\n' "$(timestamp)" "$*"
-}
-
-exit_failed() {
-  local exit_code="$1"
-  shift
-
-  EXIT_IS_FAILURE="true"
-
-  log_error "$*"
-  write_status "last-error" "$*"
-  write_status "current-status" "failed"
-  exit "$exit_code"
-}
-
-cleanup_resources() {
-  log_info "Cleaning up..."
-
-  if mountpoint -q "$VAULT_DECRYPTED_DIR"; then
-    log_info "Unmounting Cryptomator vault: $VAULT_DECRYPTED_DIR"
-
-    fusermount3 -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
-      fusermount -u "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
-      umount "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
-      umount -l "$VAULT_DECRYPTED_DIR" 2>/dev/null || \
-      true
-  fi
-
-  if [[ -n "${CRYPTOMATOR_PID}" ]] && kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
-    log_info "Stopping Cryptomator CLI..."
-
-    kill -TERM "$CRYPTOMATOR_PID" 2>/dev/null || true
-
-    for _ in $(seq 1 5); do
-      if ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
-        wait "$CRYPTOMATOR_PID" 2>/dev/null || true
-        CRYPTOMATOR_PID=""
-        log_info "Cryptomator CLI stopped."
-        return 0
-      fi
-      sleep 1
-    done
-
-    log_warn "Cryptomator CLI did not stop after SIGTERM, sending SIGKILL..."
-    kill -KILL "$CRYPTOMATOR_PID" 2>/dev/null || true
-    wait "$CRYPTOMATOR_PID" 2>/dev/null || true
-    CRYPTOMATOR_PID=""
-    log_warn "Cryptomator CLI killed."
-  fi
-
-  CRYPTOMATOR_PID=""
-}
-
-cleanup() {
+cleanup_scheduler() {
   trap - EXIT INT TERM
-  cleanup_resources
+
+  if [[ -n "$SUPERCRONIC_PID" ]] && kill -0 "$SUPERCRONIC_PID" 2>/dev/null; then
+    log_info "Stopping scheduler..."
+    kill -TERM "$SUPERCRONIC_PID" 2>/dev/null || true
+    wait "$SUPERCRONIC_PID" 2>/dev/null || true
+  fi
 
   if [[ "$EXIT_IS_FAILURE" != "true" ]]; then
     write_status "current-status" "stopped"
   fi
 }
 
-trap cleanup EXIT
-trap 'cleanup; exit "$EXIT_OK"' INT
-trap 'cleanup; exit "$EXIT_OK"' TERM
+run_scheduled_sync() {
+  load_config_defaults
+  validate_config
 
-require_cryptomator_vault() {
-  local dir="$1"
-
-  if [[ ! -f "$dir/vault.cryptomator" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "missing vault.cryptomator in encrypted vault dir: $dir"
-  fi
-
-  if [[ ! -f "$dir/masterkey.cryptomator" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "missing masterkey.cryptomator in encrypted vault dir: $dir"
-  fi
-
-  if [[ ! -d "$dir/d" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "missing encrypted data directory 'd' in encrypted vault dir: $dir"
-  fi
-}
-
-require_dir() {
-  local dir="$1"
-  local name="$2"
-
-  if [[ ! -d "$dir" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "$name does not exist: $dir"
-  fi
-}
-
-require_empty_mountpoint() {
-  mkdir -p "$VAULT_DECRYPTED_DIR"
-
-  if find "$VAULT_DECRYPTED_DIR" -mindepth 1 -maxdepth 1 | read -r; then
-    exit_failed "$EXIT_CONFIG_ERROR" "vault decrypted dir must be empty: $VAULT_DECRYPTED_DIR"
-  fi
-
-  VAULT_DECRYPTED_BASE_DEV="$(stat -c '%d' "$VAULT_DECRYPTED_DIR")"
-  log_info "Base device for decrypted vault dir: $VAULT_DECRYPTED_BASE_DEV"
-}
-
-wait_for_mountpoint() {
-  local timeout_seconds="${1:-60}"
-  local current_dev=""
-
-  for _ in $(seq 1 "$timeout_seconds"); do
-    current_dev="$(stat -c '%d' "$VAULT_DECRYPTED_DIR")"
-
-    if [[ "$current_dev" != "$VAULT_DECRYPTED_BASE_DEV" ]]; then
-      return 0
-    fi
-
-    if [[ -n "${CRYPTOMATOR_PID}" ]] && ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
-      return 1
-    fi
-
-    sleep 1
-  done
-
-  return 1
-}
-
-sync_once() {
-  local dry_run_args=()
-  local exclude_args=()
-  local delete_args=()
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    dry_run_args=(--dry-run)
-    log_warn "DRY_RUN enabled. No files will be written to the vault."
-  fi
-
-  if [[ -n "${RSYNC_EXCLUDE_FILE:-}" ]]; then
-    exclude_args=(--exclude-from "$RSYNC_EXCLUDE_FILE")
-  fi
-
-  if [[ "$RSYNC_DELETE" == "true" ]]; then
-    delete_args=(--delete)
-  fi
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_info "Running rsync dry-run syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
-  else
-    log_info "Running rsync syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
-  fi
+  local status=0
 
   set +e
-  # shellcheck disable=SC2086
-  rsync $RSYNC_ARGS "${dry_run_args[@]}" "${delete_args[@]}" "${exclude_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
-  local rsync_exit_code="$?"
+  flock -n -E "$EXIT_LOCK_SKIPPED" "$SYNC_LOCK_FILE" /sync.sh
+  status="$?"
   set -e
 
-  if [[ "$rsync_exit_code" -ne 0 ]]; then
-    exit_failed "$EXIT_GENERAL_ERROR" "Rsync failed with exit code $rsync_exit_code"
-  fi
-
-  log_info "Rsync finished."
-}
-
-unlock_fuse() {
-  log_info "Unlocking Cryptomator vault via FUSE..."
-
-  local password_file="/tmp/cryptomator-password"
-  local cryptomator_log="/tmp/cryptomator-fuse.log"
-
-  : > "$cryptomator_log"
-
-  umask 077
-  printf '%s\n' "$VAULT_PASSWORD" > "$password_file"
-
-  cryptomator-cli unlock \
-    --password:stdin \
-    --mounter=org.cryptomator.frontend.fuse.mount.LinuxFuseMountProvider \
-    --mountPoint="$VAULT_DECRYPTED_DIR" \
-    "$VAULT_ENCRYPTED_DIR" \
-    < "$password_file" \
-    > "$cryptomator_log" \
-    2>&1 &
-
-  CRYPTOMATOR_PID="$!"
-
-  rm -f "$password_file"
-
-  if ! wait_for_mountpoint "$MOUNT_TIMEOUT_SECONDS"; then
-    log_error "FUSE unlock failed."
-    cat "$cryptomator_log" >&2 || true
-    return 1
-  fi
-
-  log_info "Vault unlocked via FUSE."
-}
-
-unlock_webdav() {
-  log_info "Unlocking Cryptomator vault via WebDAV..."
-
-  local cryptomator_log="/tmp/cryptomator-webdav.log"
-  local password_file="/tmp/cryptomator-password"
-  local davfs_error_log="/tmp/davfs2-mount-error.log"
-  local davfs_secrets_tmp="/tmp/davfs2-secrets"
-  local webdav_url=""
-  # The WebDAV username and password are only used by `davfs2` to avoid interactive prompts when mounting the local WebDAV endpoint exposed by Cryptomator CLI.
-  local davfs_user="cryptomator"
-  local davfs_pass="cryptomator"
-
-  : > "$cryptomator_log"
-  : > "$davfs_error_log"
-
-  umask 077
-  printf '%s\n' "$VAULT_PASSWORD" > "$password_file"
-
-  cryptomator-cli unlock \
-    --password:stdin \
-    --mounter=org.cryptomator.frontend.webdav.mount.FallbackMounter \
-    "$VAULT_ENCRYPTED_DIR" \
-    < "$password_file" \
-    > "$cryptomator_log" \
-    2>&1 &
-
-  CRYPTOMATOR_PID="$!"
-
-  rm -f "$password_file"
-
-  log_info "Waiting for Cryptomator WebDAV URL..."
-
-  for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
-    webdav_url="$(
-      sed -n 's/.*Unlocked and mounted vault successfully to \(http:\/\/[^[:space:]]*\).*/\1/p' "$cryptomator_log" | tail -n1
-    )"
-
-    if [[ -n "$webdav_url" ]]; then
-      log_info "Detected WebDAV endpoint: $webdav_url"
-      break
-    fi
-
-    if [[ -n "${CRYPTOMATOR_PID}" ]] && ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
-      log_error "Cryptomator CLI exited before WebDAV URL could be detected."
-      cat "$cryptomator_log" >&2 || true
-      return 1
-    fi
-
-    sleep 1
-  done
-
-  if [[ -z "$webdav_url" ]]; then
-    log_error "WebDAV URL could not be detected."
-    cat "$cryptomator_log" >&2 || true
-    return 1
-  fi
-
-  log_info "Preparing davfs2 credentials..."
-
-  mkdir -p /etc/davfs2
-  touch /etc/davfs2/secrets
-  chmod 600 /etc/davfs2/secrets
-
-  grep -vF "$webdav_url" /etc/davfs2/secrets > "$davfs_secrets_tmp" || true
-  mv "$davfs_secrets_tmp" /etc/davfs2/secrets
-
-  printf '%s %s %s\n' "$webdav_url" "$davfs_user" "$davfs_pass" >> /etc/davfs2/secrets
-  chmod 600 /etc/davfs2/secrets
-
-  log_info "Mounting WebDAV endpoint to $VAULT_DECRYPTED_DIR"
-
-  for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
-    : > "$davfs_error_log"
-
-    if mount -t davfs \
-      -o uid="$(id -u)",gid="$(id -g)",rw,nouser \
-      "$webdav_url" \
-      "$VAULT_DECRYPTED_DIR" \
-      2>"$davfs_error_log"; then
-      log_info "Vault unlocked via WebDAV and mounted to $VAULT_DECRYPTED_DIR."
-      return 0
-    fi
-
-    sleep 1
-  done
-
-  log_error "WebDAV mount failed."
-  cat "$davfs_error_log" >&2 || true
-  return 1
-}
-
-validate_config() {
-  require_dir "$SYNC_DIR" "sync dir"
-  require_dir "$VAULT_ENCRYPTED_DIR" "encrypted vault dir"
-  require_cryptomator_vault "$VAULT_ENCRYPTED_DIR"
-  require_empty_mountpoint
-
-  if [[ -z "${CRYPTOMATOR_VAULT_PASSWORD:-}" && -z "${CRYPTOMATOR_VAULT_PASSWORD_FILE:-}" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD or CRYPTOMATOR_VAULT_PASSWORD_FILE is required"
-  fi
-  
-  if [[ -z "${CRYPTOMATOR_VAULT_PASSWORD:-}" && -n "${CRYPTOMATOR_VAULT_PASSWORD_FILE:-}" ]]; then
-    if [[ ! -f "$CRYPTOMATOR_VAULT_PASSWORD_FILE" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD_FILE does not exist: $CRYPTOMATOR_VAULT_PASSWORD_FILE"
-    fi
-  
-    if [[ ! -r "$CRYPTOMATOR_VAULT_PASSWORD_FILE" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD_FILE is not readable: $CRYPTOMATOR_VAULT_PASSWORD_FILE"
-    fi
-  
-    if [[ ! -s "$CRYPTOMATOR_VAULT_PASSWORD_FILE" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD_FILE is empty: $CRYPTOMATOR_VAULT_PASSWORD_FILE"
-    fi
-  fi
-
-  case "$CRYPTOMATOR_MOUNT_MODE" in
-    fuse|webdav|auto)
-      ;;
-    *)
-      exit_failed "$EXIT_CONFIG_ERROR" "Invalid CRYPTOMATOR_MOUNT_MODE: $CRYPTOMATOR_MOUNT_MODE. Allowed values: fuse, webdav, auto"
-      ;;
-  esac
-
-  case "$UPSTREAM_FAIL_ACTION" in
-    exit|continue)
-      ;;
-    *)
-      exit_failed "$EXIT_CONFIG_ERROR" "Invalid UPSTREAM_FAIL_ACTION: $UPSTREAM_FAIL_ACTION. Allowed values: exit, continue"
-      ;;
-  esac
-
-  if [[ "$DRY_RUN" != "true" && "$DRY_RUN" != "false" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "DRY_RUN must be true or false"
-  fi
-
-  if [[ "$RSYNC_DELETE" != "true" && "$RSYNC_DELETE" != "false" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_DELETE must be true or false"
-  fi
-
-  if [[ -n "${RSYNC_EXCLUDE_FILE:-}" ]]; then
-    if [[ ! -f "$RSYNC_EXCLUDE_FILE" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_EXCLUDE_FILE does not exist: $RSYNC_EXCLUDE_FILE"
-    fi
-  
-    if [[ ! -r "$RSYNC_EXCLUDE_FILE" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_EXCLUDE_FILE is not readable: $RSYNC_EXCLUDE_FILE"
-    fi
-  fi
-
-  if ! [[ "$SYNC_INTERVAL_MINUTES" =~ ^[0-9]+$ ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "SYNC_INTERVAL_MINUTES must be a non-negative integer"
-  fi
-
-  if ! [[ "$MOUNT_TIMEOUT_SECONDS" =~ ^[0-9]+$ ]] || [[ "$MOUNT_TIMEOUT_SECONDS" == "0" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "MOUNT_TIMEOUT_SECONDS must be a positive integer"
-  fi
-
-  if [[ "$UPSTREAM_ENABLED" != "true" && "$UPSTREAM_ENABLED" != "false" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_ENABLED must be true or false"
-  fi
-  
-  if [[ "$UPSTREAM_ENABLED" == "true" ]]; then
-    if [[ -z "$UPSTREAM_DESTINATIONS" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_DESTINATIONS is required when UPSTREAM_ENABLED=true"
-    fi
-  
-    if [[ ! -f "$UPSTREAM_CONFIG" ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "Rclone config does not exist: $UPSTREAM_CONFIG"
-    fi
-
-    if ! [[ "$UPSTREAM_START_DELAY_SECONDS" =~ ^[0-9]+$ ]]; then
-      exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_START_DELAY_SECONDS must be a non-negative integer"
-    fi
-  
-    case "$UPSTREAM_MODE" in
-      sync|copy)
-        ;;
-      *)
-        exit_failed "$EXIT_CONFIG_ERROR" "Invalid UPSTREAM_MODE: $UPSTREAM_MODE. Allowed values: sync, copy"
-        ;;
-    esac
-  fi
-}
-
-load_password() {
-  if [[ -n "${CRYPTOMATOR_VAULT_PASSWORD:-}" ]]; then
-    VAULT_PASSWORD="$CRYPTOMATOR_VAULT_PASSWORD"
-    unset CRYPTOMATOR_VAULT_PASSWORD
-    unset CRYPTOMATOR_VAULT_PASSWORD_FILE
+  if [[ "$status" -eq "$EXIT_LOCK_SKIPPED" ]]; then
+    log_warn "Previous sync cycle is still running. Skipping this scheduled run."
     return 0
   fi
 
-  VAULT_PASSWORD="$(cat "$CRYPTOMATOR_VAULT_PASSWORD_FILE")"
-  unset CRYPTOMATOR_VAULT_PASSWORD_FILE
-
-  if [[ -z "$VAULT_PASSWORD" ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "Vault password is empty"
-  fi
+  return "$status"
 }
 
-mount_vault() {
-  case "$CRYPTOMATOR_MOUNT_MODE" in
-    fuse)
-      unlock_fuse || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using FUSE"
-      ;;
-    webdav)
-      unlock_webdav || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using WebDAV"
-      ;;
-    auto)
-      if ! unlock_fuse; then
-        log_warn "FUSE mount failed, trying WebDAV fallback..."
-        cleanup_resources
-        require_empty_mountpoint
-        unlock_webdav || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using FUSE and WebDAV fallback"
-      fi
-      ;;
-  esac
-}
+run_cron() {
+  log_info "Cron sync enabled. Schedule: $SYNC_CRON"
 
-prepare_vault_for_rclone() {
-  if [[ "$UPSTREAM_ENABLED" != "true" ]] || [[ "$DRY_RUN" == "true" ]]; then
-    return 0
-  fi
+  printf '%s /bin/sh -c '\''/run.sh --scheduled-sync || kill -TERM 1'\''\n' "$SYNC_CRON" > "$CRON_FILE"
 
-  log_info "Preparing Cryptomator vault for rclone..."
+  trap cleanup_scheduler EXIT
+  trap 'cleanup_scheduler; exit "$EXIT_OK"' INT
+  trap 'cleanup_scheduler; exit "$EXIT_OK"' TERM
 
-  sync -f "$VAULT_ENCRYPTED_DIR" 2>/dev/null || sync
-
-  if [[ "$UPSTREAM_START_DELAY_SECONDS" != "0" ]]; then
-    log_info "Waiting ${UPSTREAM_START_DELAY_SECONDS}s before running rclone..."
-    sleep "$UPSTREAM_START_DELAY_SECONDS"
-  fi
-}
-
-handle_upstream_error() {
-  local message="$1"
-
-  write_status "last-error" "$message"
-  write_status "current-status" "upstream-error"
-
-  if [[ "$SYNC_INTERVAL_MINUTES" != "0" && "$UPSTREAM_FAIL_ACTION" == "continue" ]]; then
-    log_error "$message"
-    log_warn "Continuing despite upstream error. Next cycle will retry."
-    return 0
-  fi
-
-  exit_failed "$EXIT_GENERAL_ERROR" "$message"
-}
-
-run_rclone() {
-  if [[ "$UPSTREAM_ENABLED" != "true" ]]; then
-    return 0
-  fi
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_warn "Skipping upstream sync because DRY_RUN=true."
-    return 0
-  fi
-
-  local destination=""
-  local rclone_exit_code=0
-  local destination_count=0
-
-  IFS='|' read -r -a destinations <<< "$UPSTREAM_DESTINATIONS"
-
-  for destination in "${destinations[@]}"; do
-    destination="$(trim "$destination")"
-
-    if [[ -z "$destination" ]]; then
-      continue
-    fi
-
-    destination_count="$((destination_count + 1))"
-
-    log_info "Running rclone $UPSTREAM_MODE $VAULT_ENCRYPTED_DIR -> $destination"
-
-    set +e
-    # shellcheck disable=SC2086
-    rclone "$UPSTREAM_MODE" "$VAULT_ENCRYPTED_DIR" "$destination" \
-      --config "$UPSTREAM_CONFIG" \
-      $UPSTREAM_EXTRA_ARGS
-    rclone_exit_code="$?"
-    set -e
-
-    if [[ "$rclone_exit_code" -ne 0 ]]; then
-      handle_upstream_error "Rclone failed for destination '$destination' with exit code $rclone_exit_code"
-      return 1
-    fi
-
-    log_info "Rclone finished for destination: $destination"
-  done
-
-  if [[ "$destination_count" -eq 0 ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "UPSTREAM_DESTINATIONS does not contain any valid destination"
-  fi
-
-  log_info "Rclone finished for all destinations."
-}
-
-sync_cycle() {
-  write_status "current-status" "running"
-
-  mount_vault
-  sync_once
-  cleanup_resources
-  prepare_vault_for_rclone
-
-  if ! run_rclone; then
-    write_status "last-error" "sync cycle finished with upstream error"
-    return 0
-  fi
-
-  if [[ "$DRY_RUN" == "true" ]]; then
-    log_warn "DRY_RUN finished successfully. last-success was not updated."
-  else
-    write_status "last-success"
-  fi
-
-  write_status "current-status" "idle"
-}
-
-run_sync() {
-  if [[ "$SYNC_INTERVAL_MINUTES" == "0" ]]; then
-    sync_cycle
-    log_info "One-shot sync finished."
-    return 0
-  fi
-
-  log_info "Continuous sync enabled. Interval: ${SYNC_INTERVAL_MINUTES} minute(s)"
-  while true; do
-    sync_cycle
-    next_sync_time="$(date -d "+${SYNC_INTERVAL_MINUTES} minutes" '+%Y-%m-%d %H:%M:%S')"
-    log_info "Next sync cycle will start at $next_sync_time"
-    sleep "$((SYNC_INTERVAL_MINUTES * 60))"
-  done
+  supercronic "$CRON_FILE" &
+  SUPERCRONIC_PID="$!"
+  wait "$SUPERCRONIC_PID"
 }
 
 main() {
-  write_status "current-status" "starting"
-  validate_config
-  load_password
-  run_sync
+  case "${1:-}" in
+    --scheduled-sync)
+      run_scheduled_sync
+      ;;
+    --help|-h)
+      printf 'Usage: /run.sh [--scheduled-sync]\n'
+      ;;
+    *)
+      write_status "current-status" "starting"
+      validate_config
+
+      if [[ -z "$SYNC_CRON" ]]; then
+        exec /sync.sh
+      fi
+
+      run_cron
+      ;;
+  esac
 }
 
 main "$@"

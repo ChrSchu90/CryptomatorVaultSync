@@ -4,6 +4,7 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG RCLONE_RELEASE=1.74.2
+ARG SUPERCRONIC_RELEASE=0.2.45
 ARG CRYPTOMATOR_CLI_RELEASE=0.6.2
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -18,7 +19,8 @@ RUN set -eux; \
         ca-certificates \
         fuse3 \
         davfs2 \
-        rsync; \
+        rsync \ 
+        util-linux; \
     apt-get autoremove -y; \
     apt-get clean; \
     rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
@@ -58,8 +60,25 @@ RUN set -eux; \
     apt-get -y clean; \
     rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
 
+# Install supercronic
+RUN set -eux; \
+    apt-get update; \
+    apt-get -y install --no-install-recommends wget; \
+    DOWNLOAD="https://github.com/aptible/supercronic/releases/download/v${SUPERCRONIC_RELEASE}/supercronic-${TARGETOS}-${TARGETARCH}"; \
+    wget -qO /usr/local/bin/supercronic "${DOWNLOAD}"; \
+    chmod 0755 /usr/local/bin/supercronic; \
+    INSTALLED_VERSION="$(supercronic -version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)"; \
+    test "$INSTALLED_VERSION" = "$SUPERCRONIC_RELEASE"; \
+    apt-get -y purge wget; \
+    apt-get -y autoremove; \
+    apt-get -y clean; \
+    rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/*
+
 # Add project binaries
+COPY --chmod=755 common.sh /common.sh
+COPY --chmod=755 config.sh /config.sh
 COPY --chmod=755 run.sh /run.sh
+COPY --chmod=755 sync.sh /sync.sh
 COPY --chmod=755 healthcheck.sh /healthcheck.sh
 
 # Healthcheck is only relevant for continuous sync mode, check is ignored internally in one-shot mode
