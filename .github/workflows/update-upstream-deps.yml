@@ -87,6 +87,6 @@ jobs:
         commit-message: "Update Upstream Dependencies"
         body: |
           Updated upstream dependency:
-          - Cryptomator CLI: `${{ steps.versions.outputs.cryptomator_current }}` to `${{ steps.versions.outputs.cryptomator_latest }}`
-          - Supercronic: `${{ steps.versions.outputs.supercronic_current }}` to `${{ steps.versions.outputs.supercronic_latest }}`
-          - Rclone: `${{ steps.versions.outputs.rclone_current }}` to `${{ steps.versions.outputs.rclone_latest }}`
+          - [Cryptomator CLI](https://github.com/cryptomator/cli): `${{ steps.versions.outputs.cryptomator_current }}` to `${{ steps.versions.outputs.cryptomator_latest }}`
+          - [Supercronic](https://github.com/aptible/supercronic): `${{ steps.versions.outputs.supercronic_current }}` to `${{ steps.versions.outputs.supercronic_latest }}`
+          - [Rclone](https://github.com/rclone/rclone): `${{ steps.versions.outputs.rclone_current }}` to `${{ steps.versions.outputs.rclone_latest }}`
