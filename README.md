@@ -84,7 +84,8 @@ Files that already exist inside the Cryptomator vault are not copied back to `/s
 ## ✔️ Features
 
 - One-way sync from a plain source directory into a Cryptomator vault
-- Docker-based one-shot or interval-based operation
+- Docker-based one-shot or cron-based scheduled operation
+- Non-overlapping scheduled sync cycles via internal locking
 - FUSE mount mode
 - WebDAV fallback mode using `davfs2`
 - `auto` mount mode: tries FUSE first, falls back to WebDAV
@@ -94,6 +95,7 @@ Files that already exist inside the Cryptomator vault are not copied back to `/s
 - Optional dry-run mode
 - Optional password file support
 - Optional rclone upstream sync to one or more destinations
+- Optional upstream verification via `rclone check`
 - Internal decrypted vault mount point
 - Clean shutdown and unmount handling
 - Healthcheck and state files for monitoring
