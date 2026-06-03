@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# shellcheck disable=SC1091
 . /common.sh
+# shellcheck disable=SC1091
 . /config.sh
 
 load_config_defaults
@@ -24,7 +26,7 @@ cleanup_scheduler() {
 }
 
 run_cron() {
-  log_info "Cron sync enabled. Schedule: $SYNC_CRON"
+  log_info "Running in scheduled mode with cron: $SYNC_CRON"
 
   printf '%s /sync.sh\n' "$SYNC_CRON" > "$CRON_FILE"
 
@@ -32,7 +34,7 @@ run_cron() {
   trap 'cleanup_scheduler; exit "$EXIT_OK"' INT
   trap 'cleanup_scheduler; exit "$EXIT_OK"' TERM
 
-  supercronic "$CRON_FILE" &
+  supercronic -passthrough-logs "$CRON_FILE" &
   SUPERCRONIC_PID="$!"
   wait "$SUPERCRONIC_PID"
 }
@@ -42,7 +44,7 @@ main() {
   validate_config
 
   if [[ -z "$SYNC_CRON" ]]; then
-    log_info "One-shot sync enabled."
+    log_info "Running in one-shot mode."
     exec /sync.sh
   fi
 
