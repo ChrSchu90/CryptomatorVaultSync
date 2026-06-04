@@ -174,9 +174,13 @@ unlock_webdav() {
   local password_file="/tmp/cryptomator-password"
   local davfs_error_log="/tmp/davfs2-mount-error.log"
   local davfs_secrets_tmp="/tmp/davfs2-secrets"
-  local webdav_url=""
   local davfs_user="cryptomator"
   local davfs_pass="cryptomator"
+
+  local webdav_host="127.0.0.1"
+  local webdav_port="59317"
+  local webdav_volume_id="vault"
+  local webdav_url="http://${webdav_host}:${webdav_port}/${webdav_volume_id}/"
 
   : > "$cryptomator_log"
   : > "$davfs_error_log"
@@ -187,6 +191,8 @@ unlock_webdav() {
   cryptomator-cli unlock \
     --password:stdin \
     --mounter=org.cryptomator.frontend.webdav.mount.FallbackMounter \
+    --volumeId="$webdav_volume_id" \
+    --loopbackPort="$webdav_port" \
     "$VAULT_ENCRYPTED_DIR" \
     < "$password_file" \
     > "$cryptomator_log" \
@@ -196,20 +202,19 @@ unlock_webdav() {
 
   rm -f "$password_file"
 
-  log_info "Waiting for Cryptomator WebDAV URL..."
+  log_info "Waiting for Cryptomator WebDAV endpoint: $webdav_url"
+
+  local endpoint_available="false"
 
   for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
-    webdav_url="$(
-      sed -n 's/.*Unlocked and mounted vault successfully to \(http:\/\/[^[:space:]]*\).*/\1/p' "$cryptomator_log" | tail -n1
-    )"
-
-    if [[ -n "$webdav_url" ]]; then
-      log_info "Detected WebDAV endpoint: $webdav_url"
+    if curl --silent --fail --show-error --max-time 1 "$webdav_url" >/dev/null 2>&1; then
+      endpoint_available="true"
+      log_info "Cryptomator WebDAV endpoint is available."
       break
     fi
 
     if [[ -n "${CRYPTOMATOR_PID}" ]] && ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
-      log_error "Cryptomator CLI exited before WebDAV URL could be detected."
+      log_error "Cryptomator CLI exited before WebDAV endpoint became available."
       cat "$cryptomator_log" >&2 || true
       return 1
     fi
@@ -217,8 +222,8 @@ unlock_webdav() {
     sleep 1
   done
 
-  if [[ -z "$webdav_url" ]]; then
-    log_error "WebDAV URL could not be detected."
+  if [[ "$endpoint_available" != "true" ]]; then
+    log_error "Cryptomator WebDAV endpoint did not become available in time."
     cat "$cryptomator_log" >&2 || true
     return 1
   fi

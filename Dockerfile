@@ -14,6 +14,7 @@ RUN set -eux; \
     apt-get update; \
     apt-get -y install --no-install-recommends \
         bash \
+        curl \
         watch \
         tini \
         ca-certificates \
