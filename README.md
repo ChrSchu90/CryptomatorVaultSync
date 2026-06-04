@@ -265,7 +265,7 @@ Possible `current-status` values:
 | `VAULT_ENCRYPTED_DIR` | `/vault-encrypted` | Encrypted vault directory inside the container. |
 | `STATE_DIR` | `/state` | Directory for state files. |
 | `RSYNC_DELETE` | `false` | If `true`, delete files in the vault that no longer exist in `/sync`. Only enable this if `/sync` is the authoritative source. Use `DRY_RUN=true` first to review what would be deleted. |
-| `RSYNC_INPLACE` | `false` | Controls rsync `--inplace`, `true` enables it. `false` always disables it. |
+| `RSYNC_INPLACE` | `false` | Enables rsync `--inplace` when set to `true`. Disabled by default. |
 | `RSYNC_EXCLUDE_FILE` | empty | Optional path to an rsync exclude file. See [Rsync exclude file](#rsync_exclude_file). |
 | `RSYNC_ARGS` | `-rtvi --no-owner --no-group --no-perms` | Base rsync arguments. |
 | `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |

@@ -20,7 +20,7 @@ exit_failed() {
 
 cleanup() {
   fix_test_file_permissions
-  rm -rf ./tests/rclone-remote ./tests/sync ./tests/vault ./tests/state ./tests/config
+  rm -rf ./tests/rclone-remote ./tests/sync ./tests/vault ./tests/state ./tests/config ./tests/output
   docker image rm "$IMAGE_NAME" >/dev/null 2>&1 || true
 }
 
@@ -49,7 +49,13 @@ create_state_dir() {
   mkdir -p ./tests/state
 }
 
+create_output_dir() {
+  rm -rf ./tests/output
+  mkdir -p ./tests/output
+}
+
 docker_cleanup() {
+  create_output_dir
   create_sync_dir
   create_temp_vault
   create_temp_config
@@ -59,7 +65,7 @@ docker_cleanup() {
 
 fix_test_file_permissions() {
   docker run --rm \
-    -v "./tests:/tests" \
+    -v "./tests/output:/output" \
     "$IMAGE_NAME" \
     sh -c 'chmod -R a+rwX /tests/rclone-remote /tests/sync /tests/vault 2>/dev/null || true' \
     >/dev/null 2>&1 || true
@@ -232,6 +238,33 @@ assert_exit_code 1 \
   docker_run_healthcheck \
     -e SYNC_CRON="*/5 * * * *"
 
+log "TEST: Invalid PUID"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e PUID=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "PUID must be a non-negative integer"
+
+log "TEST: Invalid PGID"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e PGID=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "PGID must be a non-negative integer"
+
+log "TEST: Invalid UMASK"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UMASK=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "UMASK must be a valid octal file mode mask"
+
 log "TEST: Missing vault password"
 assert_exit_code 2 \
   docker_run
@@ -320,10 +353,10 @@ log "TEST: Invalid RSYNC_INPLACE"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e RSYNC_INPLACE=invalid
+    -e RSYNC_INPLACE=auto
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_exists ./tests/state/last-error
-assert_file_contains_text ./tests/state/last-error "Invalid RSYNC_INPLACE"
+assert_file_contains_text ./tests/state/last-error "RSYNC_INPLACE must be true or false"
 
 log "TEST: Invalid RSYNC_EXCLUDE_FILE"
 assert_exit_code 2 \
@@ -518,17 +551,6 @@ after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '
 if [[ "$before" != "$after" ]]; then
   exit_failed "FAILED: Vault changed even though only excluded files were present"
 fi
-assert_file_contains_status ./tests/state/current-status stopped
-assert_file_exists ./tests/state/last-success
-
-log "TEST: WebDAV sync uses RSYNC_INPLACE auto"
-docker_cleanup
-echo "hello from webdav inplace auto test" > ./tests/sync/test-file.txt
-assert_exit_code 0 \
-  docker_run_without_cleanup \
-    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e CRYPTOMATOR_MOUNT_MODE=webdav \
-    -e RSYNC_INPLACE=auto
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
 
