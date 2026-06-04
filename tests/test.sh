@@ -316,6 +316,15 @@ assert_exit_code 2 \
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "RSYNC_DELETE must be true or false"
 
+log "TEST: Invalid RSYNC_INPLACE"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e RSYNC_INPLACE=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "Invalid RSYNC_INPLACE"
+
 log "TEST: Invalid RSYNC_EXCLUDE_FILE"
 assert_exit_code 2 \
   docker_run \
@@ -509,6 +518,27 @@ after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '
 if [[ "$before" != "$after" ]]; then
   exit_failed "FAILED: Vault changed even though only excluded files were present"
 fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: WebDAV sync uses RSYNC_INPLACE auto"
+docker_cleanup
+echo "hello from webdav inplace auto test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e CRYPTOMATOR_MOUNT_MODE=webdav \
+    -e RSYNC_INPLACE=auto
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: RSYNC_INPLACE true"
+docker_cleanup
+echo "hello from inplace true test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e RSYNC_INPLACE=true
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
 

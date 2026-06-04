@@ -17,6 +17,7 @@ load_config_defaults() {
   CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-auto}"
 
   RSYNC_DELETE="${RSYNC_DELETE:-false}"
+  RSYNC_INPLACE="${RSYNC_INPLACE:-auto}"
   RSYNC_EXCLUDE_FILE="${RSYNC_EXCLUDE_FILE:-}"
   RSYNC_ARGS="${RSYNC_ARGS:--rtvi --no-owner --no-group --no-perms}"
   RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
@@ -139,6 +140,14 @@ validate_config() {
       ;;
     *)
       exit_failed "$EXIT_CONFIG_ERROR" "Invalid UPSTREAM_FAIL_ACTION: $UPSTREAM_FAIL_ACTION. Allowed values: exit, continue"
+      ;;
+  esac
+
+  case "$RSYNC_INPLACE" in
+    auto|true|false)
+      ;;
+    *)
+      exit_failed "$EXIT_CONFIG_ERROR" "Invalid RSYNC_INPLACE: $RSYNC_INPLACE. Allowed values: auto, true, false"
       ;;
   esac
 

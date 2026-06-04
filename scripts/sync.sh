@@ -9,6 +9,7 @@ set -Eeuo pipefail
 load_config_defaults
 
 CRYPTOMATOR_PID=""
+ACTIVE_MOUNT_MODE=""
 SYNC_LOCK_FILE="/tmp/cryptomator-vault-sync.lock"
 
 acquire_sync_lock() {
@@ -96,10 +97,15 @@ sync_once() {
   local dry_run_args=()
   local exclude_args=()
   local delete_args=()
+  local inplace_args=()
 
   if [[ "$DRY_RUN" == "true" ]]; then
     dry_run_args=(--dry-run)
     log_warn "DRY_RUN enabled. No files will be written to the vault."
+  fi
+
+  if [[ "$RSYNC_INPLACE" == "true" ]] || [[ "$RSYNC_INPLACE" == "auto" && "$ACTIVE_MOUNT_MODE" == "webdav" ]]; then
+    inplace_args=(--inplace)
   fi
 
   if [[ -n "${RSYNC_EXCLUDE_FILE:-}" ]]; then
@@ -116,9 +122,11 @@ sync_once() {
     log_info "Running rsync syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
   fi
 
+  log_info "Rsync args: $RSYNC_ARGS ${dry_run_args[*]} ${delete_args[*]} ${exclude_args[*]} ${inplace_args[*]} $RSYNC_EXTRA_ARGS"
+
   set +e
   # shellcheck disable=SC2086
-  rsync $RSYNC_ARGS "${dry_run_args[@]}" "${delete_args[@]}" "${exclude_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
+  rsync $RSYNC_ARGS "${dry_run_args[@]}" "${delete_args[@]}" "${exclude_args[@]}" "${inplace_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
   local rsync_exit_code="$?"
   set -e
 
@@ -164,6 +172,7 @@ unlock_fuse() {
     return 1
   fi
 
+  ACTIVE_MOUNT_MODE="fuse"
   log_info "Vault unlocked via FUSE."
 }
 
@@ -250,6 +259,7 @@ unlock_webdav() {
       "$webdav_url" \
       "$VAULT_DECRYPTED_DIR" \
       2>"$davfs_error_log"; then
+      ACTIVE_MOUNT_MODE="webdav"
       log_info "Vault unlocked via WebDAV and mounted to $VAULT_DECRYPTED_DIR."
       return 0
     fi
@@ -320,6 +330,7 @@ run_rclone_check() {
   fi
 
   log_info "Running rclone check $VAULT_ENCRYPTED_DIR -> $destination"
+  log_info "Rclone check args: check $VAULT_ENCRYPTED_DIR $destination --config $UPSTREAM_CONFIG $UPSTREAM_EXTRA_ARGS"
 
   set +e
   # shellcheck disable=SC2086
@@ -364,6 +375,7 @@ run_rclone() {
     destination_count="$((destination_count + 1))"
 
     log_info "Running rclone $UPSTREAM_MODE $VAULT_ENCRYPTED_DIR -> $destination"
+    log_info "Rclone args: $UPSTREAM_MODE $VAULT_ENCRYPTED_DIR $destination --config $UPSTREAM_CONFIG $UPSTREAM_EXTRA_ARGS"
 
     set +e
     # shellcheck disable=SC2086
