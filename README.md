@@ -33,6 +33,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
   - [`RSYNC_ARGS`](#rsync_args)
   - [`RSYNC_EXTRA_ARGS`](#rsync_extra_args)
   - [`UPSTREAM_MODE`](#upstream_mode)
+  - [`UPSTREAM_CHECK`](#upstream_check)
   - [`UPSTREAM_EXTRA_ARGS`](#upstream_extra_args)
   - [`CRYPTOMATOR_MOUNT_MODE`](#cryptomator_mount_mode)
 - [💻 Docker run](#-docker-run)
@@ -268,8 +269,7 @@ Possible `current-status` values:
 ### `RSYNC_DELETE`
 
 Only enable `RSYNC_DELETE=true` if `/sync` is the authoritative source.
-
-When enabled, files that no longer exist in `/sync` will also be deleted from the decrypted vault view during sync. This deletion is then written into the encrypted Cryptomator vault.
+When enabled, files that no longer exist in `/sync` will also be deleted from the vault during sync.
 
 Before enabling this option for the first time, run with `DRY_RUN=true` and review the rsync output.
 
@@ -307,16 +307,6 @@ RSYNC_EXTRA_ARGS=--max-size=500M
 RSYNC_EXTRA_ARGS=--bwlimit=5000
 ```
 
-### Upstream check
-
-When enabled, the container runs `rclone check` for each upstream destination after `rclone sync` or `rclone copy` completed successfully.
-
-This can help detect incomplete or inconsistent upstream transfers, but it may increase runtime and provider API usage. For cloud providers with strict rate limits, consider reducing rclone concurrency via `UPSTREAM_EXTRA_ARGS`.
-
-```env
-UPSTREAM_CHECK=true
-```
-
 ### `UPSTREAM_MODE`
 
 `UPSTREAM_MODE` controls how rclone writes `/vault-encrypted` to the configured upstream destination.
@@ -325,6 +315,16 @@ UPSTREAM_CHECK=true
 | -------- | ---------------------------------- |
 | `sync`   | Mirrors the local encrypted vault to the destination, including deletions. This is recommended when the upstream destination should be an exact copy of the local Cryptomator vault.      |
 | `copy`   | Uploads new and changed files without deleting remote files. This can be useful for conservative uploads, but it may leave old encrypted vault files at the destination and should not be treated as an exact mirror.       |
+
+### `UPSTREAM_CHECK`
+
+When enabled, the container runs `rclone check` for each upstream destination after `rclone sync` or `rclone copy` completed successfully.
+
+This can help detect incomplete or inconsistent upstream transfers, but it may increase runtime and provider API usage. For cloud providers with strict rate limits, consider reducing rclone concurrency via `UPSTREAM_EXTRA_ARGS`.
+
+```env
+UPSTREAM_CHECK=true
+```
 
 ### `UPSTREAM_EXTRA_ARGS`
 
