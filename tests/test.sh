@@ -18,6 +18,14 @@ exit_failed() {
   exit 1
 }
 
+fix_test_file_permissions() {
+  docker run --rm \
+    -v "./tests:/tests" \
+    "$IMAGE_NAME" \
+    sh -c 'chmod -R a+rwX /tests/rclone-remote /tests/sync /tests/vault /tests/state /tests/config /tests/output 2>/dev/null || true' \
+    >/dev/null 2>&1 || true
+}
+
 cleanup() {
   fix_test_file_permissions
   rm -rf ./tests/rclone-remote ./tests/sync ./tests/vault ./tests/state ./tests/config ./tests/output
@@ -61,14 +69,6 @@ docker_cleanup() {
   create_temp_config
   create_rclone_dir
   create_state_dir
-}
-
-fix_test_file_permissions() {
-  docker run --rm \
-    -v "./tests/output:/output" \
-    "$IMAGE_NAME" \
-    sh -c 'chmod -R a+rwX /tests/rclone-remote /tests/sync /tests/vault 2>/dev/null || true' \
-    >/dev/null 2>&1 || true
 }
 
 docker_run_healthcheck() {
