@@ -159,6 +159,11 @@ unlock_fuse() {
     return 1
   fi
 
+  if ! ls -la "$VAULT_DECRYPTED_DIR" >/dev/null 2>&1; then
+    log_warn "FUSE mount is not accessible. Falling back may be required."
+    return 1
+  fi
+
   log_info "Vault unlocked via FUSE."
 }
 
