@@ -30,6 +30,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
   - [`/state`](#state)
 - [⚙️ Configuration](#️-configuration)
   - [`RSYNC_DELETE`](#rsync_delete)
+  - [`RSYNC_INPLACE`](#rsync_inplace)
   - [`RSYNC_ARGS`](#rsync_args)
   - [`RSYNC_EXTRA_ARGS`](#rsync_extra_args)
   - [`UPSTREAM_MODE`](#upstream_mode)
@@ -252,6 +253,7 @@ Possible `current-status` values:
 | `VAULT_ENCRYPTED_DIR` | `/vault-encrypted` | Encrypted vault directory inside the container. |
 | `STATE_DIR` | `/state` | Directory for state files. |
 | `RSYNC_DELETE` | `false` | If `true`, delete files in the vault that no longer exist in `/sync`. Only enable this if `/sync` is the authoritative source. Use `DRY_RUN=true` first to review what would be deleted. |
+| `RSYNC_INPLACE` | `auto` | Controls rsync `--inplace`. `auto` enables it for WebDAV mounts and disables it for FUSE mounts. `true` always enables it. `false` always disables it. |
 | `RSYNC_EXCLUDE_FILE` | empty | Optional path to an rsync exclude file. See [Rsync exclude file](#rsync_exclude_file). |
 | `RSYNC_ARGS` | `-rtvi --no-owner --no-group --no-perms` | Base rsync arguments. |
 | `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |
@@ -273,6 +275,18 @@ When enabled, files that no longer exist in `/sync` will also be deleted from th
 
 Before enabling this option for the first time, run with `DRY_RUN=true` and review the rsync output.
 
+### `RSYNC_INPLACE`
+
+`RSYNC_INPLACE` controls whether rsync uses `--inplace`. Inplace writes updated files directly instead of using rsync's default temporary-file-and-rename behavior.
+
+In FUSE mode, `--inplace` is disabled by default so rsync can keep its normal temporary-file-and-rename behavior. For `WebDAV` mode, rsync uses `--inplace` automatically because WebDAV/davfs2 mounts may not support rsync's temporary-file rename behavior reliably.
+
+| `RSYNC_INPLACE` | FUSE | WebDAV | Description |
+|---|---:|---:|---|
+| `auto` | disabled | enabled | Default. Uses `--inplace` automatically for `WebDAV` mounts, but keeps rsync's default behavior for `FUSE` mounts. |
+| `true` | enabled | enabled | Always use `--inplace`. |
+| `false` | disabled | disabled | Never use `--inplace`. |
+
 ### `RSYNC_ARGS`
 
 ```env
@@ -293,6 +307,8 @@ RSYNC_ARGS=-rtvi --no-owner --no-group --no-perms
 
 `RSYNC_EXTRA_ARGS` can be used to pass additional arguments to `rsync`. These arguments are appended to the default `RSYNC_ARGS`. For all available options, see the [rsync(1) man page](https://www.man7.org/linux/man-pages/man1/rsync.1.html).
 
+Be aware that `RSYNC_ARGS` and `RSYNC_EXTRA_ARGS` are included in the logged rsync arguments, so sensitive values passed there may appear in the container logs.
+
 ```env
 # Use checksums instead of size and modification time to detect changed files
 RSYNC_EXTRA_ARGS=--checksum
@@ -306,6 +322,17 @@ RSYNC_EXTRA_ARGS=--max-size=500M
 # Limit bandwidth to approximately 5000 KiB/s
 RSYNC_EXTRA_ARGS=--bwlimit=5000
 ```
+
+### `RSYNC_EXCLUDE_FILE`
+
+You can exclude files or directories from the local sync with an rsync exclude file. The file is passed to rsync via `--exclude-from`.
+
+Patterns are interpreted relative to the `/sync` source directory. [See example rsync-exclude.txt](/example/config/rsync-exclude.txt)
+
+```env
+RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
+```
+
 
 ### `UPSTREAM_MODE`
 
@@ -330,6 +357,8 @@ UPSTREAM_CHECK=true
 
 `UPSTREAM_EXTRA_ARGS` can be used to pass additional arguments to `rclone`. These arguments are appended to the rclone command. See the official [rclone global flags documentation](https://rclone.org/flags/).
 
+The effective rclone command arguments are logged before execution to make debugging easier. Be aware that `UPSTREAM_EXTRA_ARGS` is included in the logged rclone arguments, so sensitive values passed there may appear in the container logs.
+
 ```env
 # Limit rclone bandwidth to 8M
 UPSTREAM_EXTRA_ARGS=--bwlimit 8M
@@ -342,16 +371,6 @@ UPSTREAM_EXTRA_ARGS=--drive-chunk-size 64M
 
 # Enable verbose rclone logging for debugging
 UPSTREAM_EXTRA_ARGS=-vv
-```
-
-### `RSYNC_EXCLUDE_FILE`
-
-You can exclude files or directories from the local sync with an rsync exclude file. The file is passed to rsync via `--exclude-from`.
-
-Patterns are interpreted relative to the `/sync` source directory. [See example rsync-exclude.txt](/example/config/rsync-exclude.txt)
-
-```env
-RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
 ```
 
 ### `CRYPTOMATOR_MOUNT_MODE`
