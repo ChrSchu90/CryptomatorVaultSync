@@ -2,7 +2,6 @@ services:
   cryptomator-vault-sync:
     image: ghcr.io/chrschu90/cryptomator-vault-sync:1
     container_name: cryptomator-vault-sync
-    restart: unless-stopped
     cap_add:
       - SYS_ADMIN
     devices:
