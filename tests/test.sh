@@ -4,6 +4,8 @@ cd "$(dirname "$0")/.." || exit 1
 
 IMAGE_NAME=cryptomator-vault-sync:test
 VAULT_PASSWORD=cryptomator-vault-sync
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
 
 log() {
   printf '\033[92m[%s] %s\033[0m\n' "$(date '+%H:%M:%S')" "$*"
@@ -22,7 +24,7 @@ fix_test_file_permissions() {
   docker run --rm \
     -v "./tests:/tests" \
     "$IMAGE_NAME" \
-    sh -c 'chmod -R a+rwX /tests/rclone-remote /tests/sync /tests/vault /tests/state /tests/config /tests/output 2>/dev/null || true' \
+    sh -c "chown -R ${HOST_UID}:${HOST_GID} /tests/rclone-remote /tests/sync /tests/vault /tests/state /tests/config /tests/output 2>/dev/null || true; chmod -R u+rwX /tests/rclone-remote /tests/sync /tests/vault /tests/state /tests/config /tests/output 2>/dev/null || true" \
     >/dev/null 2>&1 || true
 }
 
@@ -88,6 +90,8 @@ docker_run_without_cleanup() {
     -v "./tests/rclone-remote:/rclone-remote" \
     -v "./tests/state:/state" \
     -v "./tests/config:/config:ro" \
+    -e PUID="${HOST_UID}" \
+    -e PGID="${HOST_GID}" \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
     --security-opt apparmor:unconfined \
