@@ -2,6 +2,10 @@
 set -euo pipefail
 
 load_config_defaults() {
+  PUID="${PUID:-1000}"
+  PGID="${PGID:-1000}"
+  UMASK="${UMASK:-022}"
+
   DRY_RUN="${DRY_RUN:-false}"
   SYNC_CRON="${SYNC_CRON:-}"
 
@@ -17,7 +21,7 @@ load_config_defaults() {
   CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-auto}"
 
   RSYNC_DELETE="${RSYNC_DELETE:-false}"
-  RSYNC_INPLACE="${RSYNC_INPLACE:-auto}"
+  RSYNC_INPLACE="${RSYNC_INPLACE:-false}"
   RSYNC_EXCLUDE_FILE="${RSYNC_EXCLUDE_FILE:-}"
   RSYNC_ARGS="${RSYNC_ARGS:--rtvi --no-owner --no-group --no-perms}"
   RSYNC_EXTRA_ARGS="${RSYNC_EXTRA_ARGS:-}"
@@ -103,11 +107,23 @@ validate_cron_expression() {
 }
 
 validate_config() {
+  validate_cron_expression
+
+  if ! [[ "$PUID" =~ ^[0-9]+$ ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "PUID must be a non-negative integer"
+  fi
+  
+  if ! [[ "$PGID" =~ ^[0-9]+$ ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "PGID must be a non-negative integer"
+  fi
+  
+  if ! [[ "$UMASK" =~ ^0?[0-7]{3}$ ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "UMASK must be a valid octal file mode mask, for example 022 or 002"
+  fi
+
   if [[ -n "${SYNC_INTERVAL_MINUTES+x}" ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "SYNC_INTERVAL_MINUTES has been removed. Use SYNC_CRON instead. Leave SYNC_CRON empty for one-shot mode."
   fi
-
-  validate_cron_expression
 
   if [[ -z "${CRYPTOMATOR_VAULT_PASSWORD:-}" && -z "${CRYPTOMATOR_VAULT_PASSWORD_FILE:-}" ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_PASSWORD or CRYPTOMATOR_VAULT_PASSWORD_FILE is required"
@@ -143,20 +159,16 @@ validate_config() {
       ;;
   esac
 
-  case "$RSYNC_INPLACE" in
-    auto|true|false)
-      ;;
-    *)
-      exit_failed "$EXIT_CONFIG_ERROR" "Invalid RSYNC_INPLACE: $RSYNC_INPLACE. Allowed values: auto, true, false"
-      ;;
-  esac
-
   if [[ "$DRY_RUN" != "true" && "$DRY_RUN" != "false" ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "DRY_RUN must be true or false"
   fi
 
   if [[ "$RSYNC_DELETE" != "true" && "$RSYNC_DELETE" != "false" ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_DELETE must be true or false"
+  fi
+
+  if [[ "$RSYNC_INPLACE" != "true" && "$RSYNC_INPLACE" != "false" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "RSYNC_INPLACE must be true or false"
   fi
 
   if [[ -n "${RSYNC_EXCLUDE_FILE:-}" ]]; then

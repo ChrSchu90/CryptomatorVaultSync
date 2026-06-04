@@ -11,6 +11,7 @@ load_config_defaults
 CRYPTOMATOR_PID=""
 ACTIVE_MOUNT_MODE=""
 SYNC_LOCK_FILE="/tmp/cryptomator-vault-sync.lock"
+SYNC_USER_CONTEXT_READY="${SYNC_USER_CONTEXT_READY:-false}"
 
 acquire_sync_lock() {
   exec 9>"$SYNC_LOCK_FILE"
@@ -71,6 +72,77 @@ cleanup() {
 trap cleanup EXIT
 trap 'cleanup; exit "$EXIT_OK"' INT
 trap 'cleanup; exit "$EXIT_OK"' TERM
+
+ensure_runtime_user_exists() {
+  local user_name="syncuser"
+  local group_name="syncgroup"
+
+  if ! getent group "$PGID" >/dev/null 2>&1; then
+    log_info "Creating runtime group ${group_name} with GID ${PGID}"
+    groupadd --gid "$PGID" "$group_name"
+  else
+    group_name="$(getent group "$PGID" | cut -d: -f1)"
+  fi
+
+  if ! getent passwd "$PUID" >/dev/null 2>&1; then
+    log_info "Creating runtime user ${user_name} with UID ${PUID} and GID ${PGID}"
+    useradd \
+      --uid "$PUID" \
+      --gid "$PGID" \
+      --home-dir /tmp/cryptomator-vault-sync-home \
+      --shell /usr/sbin/nologin \
+      "$user_name"
+  fi
+}
+
+prepare_runtime_user_context() {
+  log_info "Preparing sync runtime user: ${PUID}:${PGID}"
+
+  ensure_runtime_user_exists
+
+  mkdir -p "$VAULT_DECRYPTED_DIR" "$STATE_DIR" /tmp/cryptomator-vault-sync-home
+
+  chown "$PUID:$PGID" "$VAULT_DECRYPTED_DIR" 2>/dev/null || true
+  chown "$PUID:$PGID" "$STATE_DIR" 2>/dev/null || true
+  chown "$PUID:$PGID" "$STATE_DIR"/* 2>/dev/null || true
+  chown "$PUID:$PGID" /tmp/cryptomator-vault-sync-home 2>/dev/null || true
+
+  chmod 700 /tmp/cryptomator-vault-sync-home 2>/dev/null || true
+}
+
+switch_to_runtime_user_if_needed() {
+  if [[ "$SYNC_USER_CONTEXT_READY" == "true" ]]; then
+    umask "$UMASK"
+    return 0
+  fi
+
+  if [[ "$(id -u)" != "0" ]]; then
+    log_info "Sync process is already running as $(id -u):$(id -g)."
+    export SYNC_USER_CONTEXT_READY=true
+    umask "$UMASK"
+    return 0
+  fi
+
+  if [[ "$PUID" == "0" && "$PGID" == "0" ]]; then
+    log_info "Sync process will run as root because PUID=0 and PGID=0."
+    export SYNC_USER_CONTEXT_READY=true
+    umask "$UMASK"
+    return 0
+  fi
+
+  prepare_runtime_user_context
+
+  log_info "Restarting sync process as ${PUID}:${PGID} with umask ${UMASK}"
+
+  export SYNC_USER_CONTEXT_READY=true
+  export HOME=/tmp/cryptomator-vault-sync-home
+
+  exec setpriv \
+    --reuid "$PUID" \
+    --regid "$PGID" \
+    --clear-groups \
+    -- "$0" "$@"
+}
 
 wait_for_mountpoint() {
   local timeout_seconds="${1:-60}"
@@ -427,6 +499,7 @@ sync_cycle() {
 }
 
 main() {
+  switch_to_runtime_user_if_needed "$@"
   acquire_sync_lock
   validate_config
   validate_sync_runtime
