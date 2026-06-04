@@ -243,8 +243,20 @@ Possible `current-status` values:
 
 ## ⚙️ Configuration
 
+> [!IMPORTANT]
+> The configured `PUID`/`PGID` must have read access to `/sync` 
+> and write access to `/vault-encrypted` and `/state`.
+> 
+> use `id` command to find the correct ids
+> ```bash
+> id <user>
+> ```
+
 | Variable | Default | Description |
 |---|---:|---|
+| `PUID` | `1000` | User ID used to run the sync process, including Cryptomator CLI and rsync. |
+| `PGID` | `1000` | Group ID used to run the sync process. |
+| `UMASK` | `022` | File creation mask used by the sync process. |
 | `CRYPTOMATOR_VAULT_PASSWORD` | required if no password file is used | Password for the Cryptomator vault. If both password variables are set, this value takes precedence. |
 | `CRYPTOMATOR_VAULT_PASSWORD_FILE` | unset | Full path to a file containing the Cryptomator vault password. Used only when `CRYPTOMATOR_VAULT_PASSWORD` is not set. |
 | `CRYPTOMATOR_MOUNT_MODE` | `auto` | Mount mode: `fuse`, `webdav`, or `auto`. See [Cryptomator mount modes](#cryptomator_mount_mode). |
@@ -253,7 +265,7 @@ Possible `current-status` values:
 | `VAULT_ENCRYPTED_DIR` | `/vault-encrypted` | Encrypted vault directory inside the container. |
 | `STATE_DIR` | `/state` | Directory for state files. |
 | `RSYNC_DELETE` | `false` | If `true`, delete files in the vault that no longer exist in `/sync`. Only enable this if `/sync` is the authoritative source. Use `DRY_RUN=true` first to review what would be deleted. |
-| `RSYNC_INPLACE` | `auto` | Controls rsync `--inplace`. `auto` enables it for WebDAV mounts and disables it for FUSE mounts. `true` always enables it. `false` always disables it. |
+| `RSYNC_INPLACE` | `false` | Controls rsync `--inplace`, `true` enables it. `false` always disables it. |
 | `RSYNC_EXCLUDE_FILE` | empty | Optional path to an rsync exclude file. See [Rsync exclude file](#rsync_exclude_file). |
 | `RSYNC_ARGS` | `-rtvi --no-owner --no-group --no-perms` | Base rsync arguments. |
 | `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |
@@ -277,15 +289,11 @@ Before enabling this option for the first time, run with `DRY_RUN=true` and revi
 
 ### `RSYNC_INPLACE`
 
-`RSYNC_INPLACE` controls whether rsync uses `--inplace`. Inplace writes updated files directly instead of using rsync's default temporary-file-and-rename behavior.
+`RSYNC_INPLACE` controls whether `rsync` uses `--inplace`. Inplace writes updated files directly instead of using rsync's default temporary-file-and-rename behavior.
 
-In FUSE mode, `--inplace` is disabled by default so rsync can keep its normal temporary-file-and-rename behavior. For `WebDAV` mode, rsync uses `--inplace` automatically because WebDAV/davfs2 mounts may not support rsync's temporary-file rename behavior reliably.
-
-| `RSYNC_INPLACE` | FUSE | WebDAV | Description |
-|---|---:|---:|---|
-| `auto` | disabled | enabled | Default. Uses `--inplace` automatically for `WebDAV` mounts, but keeps rsync's default behavior for `FUSE` mounts. |
-| `true` | enabled | enabled | Always use `--inplace`. |
-| `false` | disabled | disabled | Never use `--inplace`. |
+```env
+RSYNC_INPLACE=false
+```
 
 ### `RSYNC_ARGS`
 
