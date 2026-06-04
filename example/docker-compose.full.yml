@@ -13,6 +13,8 @@ services:
     environment:
       CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"             # Required
       #CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password  # Optional replacement for CRYPTOMATOR_VAULT_PASSWORD
+      PUID: 1000                                                # Optional [default=1000] User ID used to run the sync process 
+      PGID: 1000                                                # Optional [default=1000] Group ID used to run the sync process
       SYNC_DIR: /sync                                           # Optional [default=/sync]
       VAULT_ENCRYPTED_DIR: /vault-encrypted                     # Optional [default=/vault-encrypted]
       CRYPTOMATOR_MOUNT_MODE: auto                              # Optional [default=auto] fuse, webdav, auto
