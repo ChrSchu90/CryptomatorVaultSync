@@ -11,6 +11,12 @@ load_config_defaults
 SUPERCRONIC_PID=""
 CRON_FILE="/tmp/cryptomator-vault-sync.cron"
 
+log_tool_versions() {
+  log_info "Cryptomator CLI version: $(cryptomator-cli --version 2>&1 | head -n1)"
+  log_info "Rclone version: $(rclone version 2>&1 | head -n1)"
+  log_info "Supercronic version: $(supercronic -version 2>&1 | head -n1)"
+}
+
 cleanup_scheduler() {
   trap - EXIT INT TERM
 
@@ -42,6 +48,7 @@ run_cron() {
 main() {
   write_status "current-status" "starting"
   validate_config
+  log_tool_versions
 
   if [[ -z "$SYNC_CRON" ]]; then
     log_info "Running in one-shot mode."
