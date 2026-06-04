@@ -19,7 +19,7 @@ services:
       MOUNT_TIMEOUT_SECONDS: 60                                 # Optional [default=60]
       SYNC_CRON: ""                                             # Optional [default=] empty=one-shot, cron expression=scheduled mode
       RSYNC_DELETE: false                                       # Optional [default=false] Do not enable unless /sync is intended to be the authoritative source!
-      RSYNC_INPLACE: auto                                       # Optional [default=auto] auto enables --inplace for WebDAV mounts, true always enables it, false disables it
+      RSYNC_INPLACE: false                                      # Optional [default=false] --inplace for rsync
       RSYNC_EXCLUDE_FILE: /config/rsync-exclude.txt             # Optional [default=] file that is used for rsync --exclude-from "$RSYNC_EXCLUDE_FILE"
       RSYNC_ARGS: '-rtvi --no-owner --no-group --no-perms'      # Optional [default=-rtvi --no-owner --no-group --no-perms]
       RSYNC_EXTRA_ARGS:                                         # Optional [default=]
