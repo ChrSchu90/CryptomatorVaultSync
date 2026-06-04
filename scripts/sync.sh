@@ -176,7 +176,7 @@ sync_once() {
     log_warn "DRY_RUN enabled. No files will be written to the vault."
   fi
 
-  if [[ "$RSYNC_INPLACE" == "true" ]] || [[ "$RSYNC_INPLACE" == "auto" && "$ACTIVE_MOUNT_MODE" == "webdav" ]]; then
+  if [[ "$RSYNC_INPLACE" == "true" ]]; then
     inplace_args=(--inplace)
   fi
 
