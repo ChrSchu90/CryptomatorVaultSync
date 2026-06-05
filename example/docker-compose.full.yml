@@ -15,6 +15,7 @@ services:
       #CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password  # Optional replacement for CRYPTOMATOR_VAULT_PASSWORD
       PUID: 1000                                                # Optional [default=1000] User ID used to run the sync process 
       PGID: 1000                                                # Optional [default=1000] Group ID used to run the sync process
+      UMASK: 022                                                # Optional [default=022] File creation mask; use 002 for shared folders when group-write access is required
       SYNC_DIR: /sync                                           # Optional [default=/sync]
       VAULT_ENCRYPTED_DIR: /vault-encrypted                     # Optional [default=/vault-encrypted]
       CRYPTOMATOR_MOUNT_MODE: fuse                              # Optional [default=fuse] fuse, webdav
