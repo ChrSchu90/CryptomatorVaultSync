@@ -85,12 +85,11 @@ Files that already exist inside the Cryptomator vault are not copied back to `/s
 
 ## ✔️ Features
 
+- `PUID` and `PGID` to ensure correct file permissions for mounted host directories, especially on NAS systems.
 - One-way sync from a plain source directory into a Cryptomator vault
 - Docker-based one-shot or cron-based scheduled operation
 - Non-overlapping scheduled sync cycles via internal locking
-- FUSE mount mode
-- WebDAV fallback mode using `davfs2`
-- `auto` mount mode: tries FUSE first, falls back to WebDAV
+- `FUSE` mount mode
 - `rsync` based file transfer
 - Optional `RSYNC_DELETE=true`
 - Optional rsync exclude file
@@ -259,7 +258,7 @@ Possible `current-status` values:
 | `UMASK` | `022` | File creation mask used by the sync process. |
 | `CRYPTOMATOR_VAULT_PASSWORD` | required if no password file is used | Password for the Cryptomator vault. If both password variables are set, this value takes precedence. |
 | `CRYPTOMATOR_VAULT_PASSWORD_FILE` | unset | Full path to a file containing the Cryptomator vault password. Used only when `CRYPTOMATOR_VAULT_PASSWORD` is not set. |
-| `CRYPTOMATOR_MOUNT_MODE` | `auto` | Mount mode: `fuse`, `webdav`, or `auto`. See [Cryptomator mount modes](#cryptomator_mount_mode). |
+| `CRYPTOMATOR_MOUNT_MODE` | `fuse` | Mount/sync mode. `fuse` performs the local rsync sync. `webdav` starts the Cryptomator WebDAV endpoint but sync is currently not supported. See [Cryptomator mount modes](#cryptomator_mount_mode) |
 | `DRY_RUN` | `false` | Runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. `/state/last-success` is not updated. |
 | `SYNC_DIR` | `/sync` | Source directory inside the container. |
 | `VAULT_ENCRYPTED_DIR` | `/vault-encrypted` | Encrypted vault directory inside the container. |
@@ -383,11 +382,15 @@ UPSTREAM_EXTRA_ARGS=-vv
 
 ### `CRYPTOMATOR_MOUNT_MODE`
 
+> [!NOTE]
+> WebDAV currently starts the Cryptomator WebDAV endpoint but does not perform the local sync yet.
+> Support is planned, but currently exits with an error after the endpoint has been verified.
+
 | Option   | Meaning                            |
 | -------- | ---------------------------------- |
-| `fuse`   | Uses Cryptomator CLI's Linux FUSE mount provider.     |
 | `webdav`   | Uses Cryptomator CLI's WebDAV fallback mounter, detects the generated WebDAV URL from the CLI output, and mounts it internally using `davfs2`.       |
-| `auto`   | Tries FUSE first. If FUSE fails, it cleans up and tries WebDAV. This is the default.       |
+| `fuse`   | Uses Cryptomator CLI's Linux FUSE mount provider.     |
+
 
 To check `FUSE` availability on the host:
 
