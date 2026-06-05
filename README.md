@@ -324,7 +324,7 @@ To enable this on Synology:
 3. Go to `Control Panel` -> `Shared Folder`.
 4. Select the shared folder that contains your encrypted vault and click `Edit`.
 5. Open `NFS Permissions` and create a rule for `127.0.0.1`.
-6. Allow access to subfolders if your vault is inside a subdirectory.
+6. Tick allow access to subfolders.
 7. Save the settings.
 
 Example Docker Compose configuration:
