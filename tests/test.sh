@@ -341,7 +341,7 @@ log "TEST: Invalid CRYPTOMATOR_MOUNT_MODE"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e CRYPTOMATOR_MOUNT_MODE=invalid
+    -e CRYPTOMATOR_MOUNT_MODE=auto
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "Invalid CRYPTOMATOR_MOUNT_MODE:"
 

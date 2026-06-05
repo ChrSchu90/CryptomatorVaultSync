@@ -19,7 +19,6 @@ RUN set -eux; \
         tini \
         ca-certificates \
         fuse3 \
-        davfs2 \
         rsync \
         util-linux; \
     apt-get autoremove -y; \

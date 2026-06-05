@@ -18,7 +18,7 @@ load_config_defaults() {
   VAULT_DECRYPTED_BASE_DEV="${VAULT_DECRYPTED_BASE_DEV:-}"
   VAULT_PASSWORD="${VAULT_PASSWORD:-}"
 
-  CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-auto}"
+  CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-fuse}"
 
   RSYNC_DELETE="${RSYNC_DELETE:-false}"
   RSYNC_INPLACE="${RSYNC_INPLACE:-false}"
@@ -144,10 +144,10 @@ validate_config() {
   fi
 
   case "$CRYPTOMATOR_MOUNT_MODE" in
-    fuse|webdav|auto)
+    fuse|webdav)
       ;;
     *)
-      exit_failed "$EXIT_CONFIG_ERROR" "Invalid CRYPTOMATOR_MOUNT_MODE: $CRYPTOMATOR_MOUNT_MODE. Allowed values: fuse, webdav, auto"
+      exit_failed "$EXIT_CONFIG_ERROR" "Invalid CRYPTOMATOR_MOUNT_MODE: $CRYPTOMATOR_MOUNT_MODE. Allowed values: fuse and webdav"
       ;;
   esac
 

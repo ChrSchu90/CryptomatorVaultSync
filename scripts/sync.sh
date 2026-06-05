@@ -165,7 +165,15 @@ wait_for_mountpoint() {
   return 1
 }
 
-sync_once() {
+sync_once_webdav() {
+  # Future implementation:
+  # - use the Cryptomator WebDAV endpoint directly
+  # - do not mount it via davfs2
+  # - likely use rclone or curl-based WebDAV operations
+  exit_failed "$EXIT_GENERAL_ERROR" "WebDAV sync mode is currently not supported"
+}
+
+sync_once_fuse() {
   local dry_run_args=()
   local exclude_args=()
   local delete_args=()
@@ -207,6 +215,20 @@ sync_once() {
   fi
 
   log_info "Rsync finished."
+}
+
+sync_once() {
+  case "$ACTIVE_MOUNT_MODE" in
+    fuse)
+      sync_once_fuse
+      ;;
+    webdav)
+      sync_once_webdav
+      ;;
+    *)
+      exit_failed "$EXIT_GENERAL_ERROR" "No active mount mode selected"
+      ;;
+  esac
 }
 
 unlock_fuse() {
@@ -253,10 +275,6 @@ unlock_webdav() {
 
   local cryptomator_log="/tmp/cryptomator-webdav.log"
   local password_file="/tmp/cryptomator-password"
-  local davfs_error_log="/tmp/davfs2-mount-error.log"
-  local davfs_secrets_tmp="/tmp/davfs2-secrets"
-  local davfs_user="cryptomator"
-  local davfs_pass="cryptomator"
 
   local webdav_host="127.0.0.1"
   local webdav_port="59317"
@@ -264,7 +282,6 @@ unlock_webdav() {
   local webdav_url="http://${webdav_host}:${webdav_port}/${webdav_volume_id}/"
 
   : > "$cryptomator_log"
-  : > "$davfs_error_log"
 
   umask 077
   printf '%s\n' "$VAULT_PASSWORD" > "$password_file"
@@ -285,13 +302,11 @@ unlock_webdav() {
 
   log_info "Waiting for Cryptomator WebDAV endpoint: $webdav_url"
 
-  local endpoint_available="false"
-
   for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
     if curl --silent --fail --show-error --max-time 1 "$webdav_url" >/dev/null 2>&1; then
-      endpoint_available="true"
-      log_info "Cryptomator WebDAV endpoint is available."
-      break
+      ACTIVE_MOUNT_MODE="webdav"
+      log_info "Cryptomator WebDAV endpoint is available: $webdav_url"
+      return 0
     fi
 
     if [[ -n "${CRYPTOMATOR_PID}" ]] && ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
@@ -303,44 +318,8 @@ unlock_webdav() {
     sleep 1
   done
 
-  if [[ "$endpoint_available" != "true" ]]; then
-    log_error "Cryptomator WebDAV endpoint did not become available in time."
-    cat "$cryptomator_log" >&2 || true
-    return 1
-  fi
-
-  log_info "Preparing davfs2 credentials..."
-
-  mkdir -p /etc/davfs2
-  touch /etc/davfs2/secrets
-  chmod 600 /etc/davfs2/secrets
-
-  grep -vF "$webdav_url" /etc/davfs2/secrets > "$davfs_secrets_tmp" || true
-  mv "$davfs_secrets_tmp" /etc/davfs2/secrets
-
-  printf '%s %s %s\n' "$webdav_url" "$davfs_user" "$davfs_pass" >> /etc/davfs2/secrets
-  chmod 600 /etc/davfs2/secrets
-
-  log_info "Mounting WebDAV endpoint to $VAULT_DECRYPTED_DIR"
-
-  for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
-    : > "$davfs_error_log"
-
-    if mount -t davfs \
-      -o uid="$(id -u)",gid="$(id -g)",rw,nouser \
-      "$webdav_url" \
-      "$VAULT_DECRYPTED_DIR" \
-      2>"$davfs_error_log"; then
-      ACTIVE_MOUNT_MODE="webdav"
-      log_info "Vault unlocked via WebDAV and mounted to $VAULT_DECRYPTED_DIR."
-      return 0
-    fi
-
-    sleep 1
-  done
-
-  log_error "WebDAV mount failed."
-  cat "$davfs_error_log" >&2 || true
+  log_error "Cryptomator WebDAV endpoint did not become available in time."
+  cat "$cryptomator_log" >&2 || true
   return 1
 }
 
@@ -352,13 +331,8 @@ mount_vault() {
     webdav)
       unlock_webdav || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using WebDAV"
       ;;
-    auto)
-      if ! unlock_fuse; then
-        log_warn "FUSE mount failed, trying WebDAV fallback..."
-        cleanup_resources
-        require_empty_mountpoint
-        unlock_webdav || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using FUSE and WebDAV fallback"
-      fi
+    *)
+      exit_failed "$EXIT_GENERAL_ERROR" "No active mount mode selected"
       ;;
   esac
 }
