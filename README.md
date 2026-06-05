@@ -302,6 +302,11 @@ On NAS or shared-folder setups, the vault may also be opened from another device
 
 Make sure the configured `PUID` and `PGID` have read access to `/sync` and read/write access to `/vault-encrypted`, `/state`, and any mounted config files.
 
+> [!NOTE]
+> `Synology Cloud Sync` may not immediately detect changes written by Docker containers. If you use `Cloud Sync` to upload the encrypted vault, a `rescan` or `service restart` may be required before new vault files are uploaded.
+>
+> For reliable upstream uploads on such systems, prefer the built-in `rclone` upstream sync.
+
 A typical NAS/shared-folder setup can look like this:
 
 ```env
