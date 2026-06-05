@@ -2,6 +2,8 @@
 
 cd "$(dirname "$0")" || exit
 
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
 DOCKER_FILE=Dockerfile
 IMAGE_NAME=cryptomator-vault-sync:dev
 DOCKER_PLATFORM=linux/amd64 # linux/amd64 linux/arm64/v8
@@ -21,6 +23,8 @@ docker buildx build --load --progress=plain --platform ${DOCKER_PLATFORM} --buil
     -v ./debug/config:/config:ro \
     -v ./debug/vault:/vault-encrypted \
     -v ./debug/local-remote/vault:/local-remote/vault \
+    -e PUID="${HOST_UID}" \
+    -e PGID="${HOST_GID}" \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
     --security-opt apparmor:unconfined \
