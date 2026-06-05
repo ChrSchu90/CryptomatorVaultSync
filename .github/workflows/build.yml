@@ -10,11 +10,23 @@ on:
     paths-ignore:
       - '**/*.md'
       - '**/*.png'
+      - ".vscode/**"
+      - "example/**"
+      - "debug.sh"
+      - "LICENSE"
+
     tags:
       - 'v*'
   pull_request:
     branches:
-      - 'main'
+      - main
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.png'
+      - ".vscode/**"
+      - "example/**"
+      - "debug.sh"
+      - "LICENSE"
 
 env:
   DOCKER_REGISTRY: ghcr.io
