@@ -29,6 +29,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
   - [`/config`](#config)
   - [`/state`](#state)
 - [⚙️ Configuration](#️-configuration)
+  - [`PUID, PGID, UMASK and CRYPTOMATOR_VAULT_FIX_PERMISSIONS`](#puid-pgid-umask-and-cryptomator_vault_fix_permissions)
   - [`CRYPTOMATOR_MOUNT_MODE`](#cryptomator_mount_mode)
   - [`RSYNC_DELETE`](#rsync_delete)
   - [`RSYNC_INPLACE`](#rsync_inplace)
@@ -280,13 +281,11 @@ Possible `current-status` values:
 | `UPSTREAM_EXTRA_ARGS` | empty | Additional arguments passed to rclone. |
 | `UPSTREAM_START_DELAY_SECONDS` | `0` | Optional delay after unmounting the vault before running rclone. |
 
-### `PUID`, `PGID` and `UMASK`
+### `PUID`, `PGID`, `UMASK` and `CRYPTOMATOR_VAULT_FIX_PERMISSIONS`
 
-`PUID`, `PGID`, and `UMASK` control the user, group, and file creation mask used by the sync process.
+`PUID`, `PGID`, and `UMASK` define the user, group, and file creation mask used by the sync process. This is important when the encrypted Cryptomator vault is stored on a mounted host directory, especially on NAS systems or shared folders.
 
-This is especially useful on systems where the container writes vault files that are later accessed from a share. Make sure to enable `CRYPTOMATOR_VAULT_FIX_PERMISSIONS` as well.
-
-For most single-user Linux setups, the default is usually fine:
+For most single-user Linux setups, the defaults are usually sufficient:
 
 ```env
 PUID=1000
@@ -295,7 +294,22 @@ UMASK=022
 CRYPTOMATOR_VAULT_FIX_PERMISSIONS=false
 ```
 
-On NAS systems or shared folders, `UMASK=002` can be useful when the same user accesses the vault through a network share but the container needs a different effective group. It creates group-writable files and directories, which can help avoid permission issues when modifying or deleting files from another device.
+On NAS or shared-folder setups, the vault may also be opened from another device over SMB or another network share. In that case, the container may need to run with the same user ID but a different effective group ID, and files may need to remain group-writable.
+
+`UMASK=002` creates group-writable files and directories. This can help avoid permission issues when files created by the container are later modified or deleted from another device.
+
+`CRYPTOMATOR_VAULT_FIX_PERMISSIONS=true` additionally fixes permissions on the encrypted Cryptomator vault after each sync. It adds user/group read-write access and sets the setgid bit on directories. This can be required when the vault is accessed through a network share and files need to be modified or deleted from another device.
+
+Make sure the configured `PUID` and `PGID` have read access to `/sync` and read/write access to `/vault-encrypted`, `/state`, and any mounted config files.
+
+A typical NAS/shared-folder setup can look like this:
+
+```env
+PUID=1000
+PGID=1000
+UMASK=002
+CRYPTOMATOR_VAULT_FIX_PERMISSIONS=true
+```
 
 ### `CRYPTOMATOR_MOUNT_MODE`
 
