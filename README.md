@@ -294,18 +294,13 @@ UMASK=022
 CRYPTOMATOR_VAULT_FIX_PERMISSIONS=false
 ```
 
-On NAS or shared-folder setups, the vault may also be opened from another device over SMB or another network share. In that case, the container may need to run with the same user ID but a different effective group ID, and files may need to remain group-writable.
+On NAS or shared-folder setups, the encrypted vault may also be opened from another device over SMB or another network share. In this case, the container may need to run with the same user ID as the share user, but with a different effective group ID.
 
 `UMASK=002` creates group-writable files and directories. This can help avoid permission issues when files created by the container are later modified or deleted from another device.
 
-`CRYPTOMATOR_VAULT_FIX_PERMISSIONS=true` additionally fixes permissions on the encrypted Cryptomator vault after each sync. It adds user/group read-write access and sets the setgid bit on directories. This can be required when the vault is accessed through a network share and files need to be modified or deleted from another device.
+`CRYPTOMATOR_VAULT_FIX_PERMISSIONS=true` fixes permissions on the encrypted Cryptomator vault after each sync. It adds user/group read-write access and sets the setgid bit on directories. This can be required when the vault is accessed through a network share and files need to be modified or deleted from another device.
 
 Make sure the configured `PUID` and `PGID` have read access to `/sync` and read/write access to `/vault-encrypted`, `/state`, and any mounted config files.
-
-> [!NOTE]
-> `Synology Cloud Sync` may not immediately detect changes written by Docker containers. If you use `Cloud Sync` to upload the encrypted vault, a `rescan` or `service restart` may be required before new vault files are uploaded.
->
-> For reliable upstream uploads on such systems, prefer the built-in `rclone` upstream sync.
 
 A typical NAS/shared-folder setup can look like this:
 
@@ -315,6 +310,44 @@ PGID=1000
 UMASK=002
 CRYPTOMATOR_VAULT_FIX_PERMISSIONS=true
 ```
+
+#### Synology Cloud Sync and Docker bind mounts
+
+`Synology Cloud Sync` may not reliably detect changes written by Docker containers through direct bind mounts. In that case, new encrypted vault files may only be uploaded after a Cloud Sync rescan or service restart.
+
+On Synology systems, mounting the encrypted vault through an NFS-backed Docker volume instead of a direct bind mount can help Cloud Sync detect container-written changes automatically.
+
+To enable this on Synology:
+
+1. Go to `Control Panel` -> `File Services` -> `NFS`.
+2. Enable NFS. NFS v4.1 is recommended, but NFS v3 can also work if needed.
+3. Go to `Control Panel` -> `Shared Folder`.
+4. Select the shared folder that contains your encrypted vault and click `Edit`.
+5. Open `NFS Permissions` and create a rule for `127.0.0.1`.
+6. Allow access to subfolders if your vault is inside a subdirectory.
+7. Save the settings.
+
+Example Docker Compose configuration:
+
+```yml
+services:
+  cryptomator-vault-sync:
+    network_mode: host # Required when using addr=127.0.0.1 for the NFS volume
+    volumes:
+      - cloud-nfs-vault:/vault-encrypted
+      - ...
+
+volumes:
+  cloud-nfs-vault:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=127.0.0.1,nfsvers=4,rw
+      device: ":/volume1/Cloud/MyVault"
+```
+
+> [!NOTE]
+> `network_mode: none` cannot be used with this setup because the NFS-backed Docker volume requires network access.
 
 ### `CRYPTOMATOR_MOUNT_MODE`
 
