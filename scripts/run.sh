@@ -36,6 +36,8 @@ run_cron() {
 
   printf '%s /sync.sh\n' "$SYNC_CRON" > "$CRON_FILE"
 
+  write_status "current-status" "idle"
+
   trap cleanup_scheduler EXIT
   trap 'cleanup_scheduler; exit "$EXIT_OK"' INT
   trap 'cleanup_scheduler; exit "$EXIT_OK"' TERM
