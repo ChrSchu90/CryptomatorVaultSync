@@ -19,6 +19,7 @@ services:
       SYNC_DIR: /sync                                           # Optional [default=/sync]
       VAULT_ENCRYPTED_DIR: /vault-encrypted                     # Optional [default=/vault-encrypted]
       CRYPTOMATOR_MOUNT_MODE: fuse                              # Optional [default=fuse] fuse, webdav
+      CRYPTOMATOR_VAULT_FIX_PERMISSIONS: false                  # Optional [default=false] Fix encrypted vault permissions after sync for shared-folder access
       MOUNT_TIMEOUT_SECONDS: 60                                 # Optional [default=60]
       SYNC_CRON: ""                                             # Optional [default=] empty=one-shot, cron expression=scheduled mode
       RSYNC_DELETE: false                                       # Optional [default=false] Do not enable unless /sync is intended to be the authoritative source!

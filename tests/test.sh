@@ -384,6 +384,40 @@ assert_exit_code 2 \
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "Invalid CRYPTOMATOR_MOUNT_MODE:"
 
+log "TEST: Invalid CRYPTOMATOR_VAULT_FIX_PERMISSIONS"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e CRYPTOMATOR_VAULT_FIX_PERMISSIONS=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "CRYPTOMATOR_VAULT_FIX_PERMISSIONS must be true or false"
+
+log "TEST: CRYPTOMATOR_VAULT_FIX_PERMISSIONS fixes encrypted vault permissions"
+docker_cleanup
+mkdir -p ./tests/vault/permission-test-dir
+touch ./tests/vault/permission-test-dir/permission-test-file
+chmod 700 ./tests/vault/permission-test-dir
+chmod 600 ./tests/vault/permission-test-dir/permission-test-file
+echo "hello from permission fix test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e CRYPTOMATOR_VAULT_FIX_PERMISSIONS=true
+dir_mode="$(stat -c '%a' ./tests/vault/permission-test-dir)"
+file_mode="$(stat -c '%a' ./tests/vault/permission-test-dir/permission-test-file)"
+if (( (8#$dir_mode & 02000) == 0 )); then
+  exit_failed "FAILED: expected setgid bit on permission-test-dir, got mode $dir_mode"
+fi
+if (( (8#$dir_mode & 00070) != 00070 )); then
+  exit_failed "FAILED: expected group rwx permissions on directory, got mode $dir_mode"
+fi
+if (( (8#$file_mode & 00060) != 00060 )); then
+  exit_failed "FAILED: expected group rw permissions on file, got mode $file_mode"
+fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
 log "TEST: Invalid RSYNC_DELETE"
 assert_exit_code 2 \
   docker_run \

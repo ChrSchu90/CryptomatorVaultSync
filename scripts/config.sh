@@ -19,6 +19,7 @@ load_config_defaults() {
   VAULT_PASSWORD="${VAULT_PASSWORD:-}"
 
   CRYPTOMATOR_MOUNT_MODE="${CRYPTOMATOR_MOUNT_MODE:-fuse}"
+  CRYPTOMATOR_VAULT_FIX_PERMISSIONS="${CRYPTOMATOR_VAULT_FIX_PERMISSIONS:-false}"
 
   RSYNC_DELETE="${RSYNC_DELETE:-false}"
   RSYNC_INPLACE="${RSYNC_INPLACE:-false}"
@@ -158,6 +159,10 @@ validate_config() {
       exit_failed "$EXIT_CONFIG_ERROR" "Invalid UPSTREAM_FAIL_ACTION: $UPSTREAM_FAIL_ACTION. Allowed values: exit, continue"
       ;;
   esac
+
+  if [[ "$CRYPTOMATOR_VAULT_FIX_PERMISSIONS" != "true" && "$CRYPTOMATOR_VAULT_FIX_PERMISSIONS" != "false" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "CRYPTOMATOR_VAULT_FIX_PERMISSIONS must be true or false"
+  fi
 
   if [[ "$DRY_RUN" != "true" && "$DRY_RUN" != "false" ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "DRY_RUN must be true or false"

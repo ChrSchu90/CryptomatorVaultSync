@@ -255,9 +255,10 @@ Possible `current-status` values:
 |---|---:|---|
 | `PUID` | `1000` | User ID used to run the sync process, including Cryptomator CLI and rsync. |
 | `PGID` | `1000` | Group ID used to run the sync process. |
-| `UMASK` | `022` | File creation mask used by the sync process. `022` is suitable for most single-user setups; `002` can be useful on NAS/shared-folder setups where group-write access is required. |
+| `UMASK` | `022` | File creation mask used by the sync process. `022` is suitable for most single-user setups; `002` can be useful on shared-folder setups where group-write access is required, see also `CRYPTOMATOR_VAULT_FIX_PERMISSIONS`. |
 | `CRYPTOMATOR_VAULT_PASSWORD` | required if no password file is used | Password for the Cryptomator vault. If both password variables are set, this value takes precedence. |
 | `CRYPTOMATOR_VAULT_PASSWORD_FILE` | unset | Full path to a file containing the Cryptomator vault password. Used only when `CRYPTOMATOR_VAULT_PASSWORD` is not set. |
+| `CRYPTOMATOR_VAULT_FIX_PERMISSIONS` | `false` | Fixes encrypted Cryptomator vault permissions after sync by adding user/group read-write access and setting the setgid bit on directories. Useful for shared-folder setups. |
 | `CRYPTOMATOR_MOUNT_MODE` | `fuse` | Mount/sync mode. `fuse` performs the local rsync sync. `webdav` starts the Cryptomator WebDAV endpoint but sync is currently not supported. See [Cryptomator mount modes](#cryptomator_mount_mode) |
 | `DRY_RUN` | `false` | Runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. `/state/last-success` is not updated. |
 | `SYNC_DIR` | `/sync` | Source directory inside the container. |
@@ -283,7 +284,7 @@ Possible `current-status` values:
 
 `PUID`, `PGID`, and `UMASK` control the user, group, and file creation mask used by the sync process.
 
-This is especially useful on NAS systems where the container writes files that are later accessed from a network share.
+This is especially useful on systems where the container writes vault files that are later accessed from a share. Make sure to enable `CRYPTOMATOR_VAULT_FIX_PERMISSIONS` as well.
 
 For most single-user Linux setups, the default is usually fine:
 
@@ -291,6 +292,7 @@ For most single-user Linux setups, the default is usually fine:
 PUID=1000
 PGID=1000
 UMASK=022
+CRYPTOMATOR_VAULT_FIX_PERMISSIONS=false
 ```
 
 On NAS systems or shared folders, `UMASK=002` can be useful when the same user accesses the vault through a network share but the container needs a different effective group. It creates group-writable files and directories, which can help avoid permission issues when modifying or deleting files from another device.

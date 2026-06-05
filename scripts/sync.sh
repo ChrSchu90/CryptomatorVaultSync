@@ -60,6 +60,17 @@ cleanup_resources() {
   CRYPTOMATOR_PID=""
 }
 
+fix_cryptomator_vault_permissions() {
+  if [[ "$CRYPTOMATOR_VAULT_FIX_PERMISSIONS" != "true" ]]; then
+    return 0
+  fi
+
+  log_info "Fixing encrypted Cryptomator vault permissions..."
+
+  chmod -R u+rwX,g+rwX "$VAULT_ENCRYPTED_DIR"
+  find "$VAULT_ENCRYPTED_DIR" -type d -exec chmod g+s {} \;
+}
+
 cleanup() {
   trap - EXIT INT TERM
   cleanup_resources
@@ -456,6 +467,7 @@ sync_cycle() {
   mount_vault
   sync_once
   cleanup_resources
+  fix_cryptomator_vault_permissions
   prepare_vault_for_rclone
 
   if ! run_rclone; then
