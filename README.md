@@ -258,6 +258,8 @@ Possible `current-status` values:
 | `PUID` | `1000` | User ID used to run the sync process, including Cryptomator CLI and rsync. |
 | `PGID` | `1000` | Group ID used to run the sync process. |
 | `UMASK` | `022` | File creation mask used by the sync process. `022` is suitable for most single-user setups; `002` can be useful on shared-folder setups where group-write access is required, see also `CRYPTOMATOR_VAULT_FIX_PERMISSIONS`. |
+| `BEFORE_SYNC_SCRIPT` | empty | Optional executable script path inside the container. Runs as `PUID:PGID` before the vault is mounted and synced. |
+| `AFTER_SYNC_SCRIPT` | empty | Optional executable script path inside the container. Runs as `PUID:PGID` after sync, permission fix, and upstream sync. |
 | `CRYPTOMATOR_VAULT_PASSWORD` | required if no password file is used | Password for the Cryptomator vault. If both password variables are set, this value takes precedence. |
 | `CRYPTOMATOR_VAULT_PASSWORD_FILE` | unset | Full path to a file containing the Cryptomator vault password. Used only when `CRYPTOMATOR_VAULT_PASSWORD` is not set. |
 | `CRYPTOMATOR_VAULT_FIX_PERMISSIONS` | `false` | Fixes encrypted Cryptomator vault permissions after sync by adding user/group read-write access and setting the setgid bit on directories. Useful for shared-folder setups. |
@@ -344,6 +346,15 @@ volumes:
       type: nfs
       o: addr=127.0.0.1,nfsvers=4,rw
       device: ":/volume1/Cloud/MyVault"
+```
+
+### `BEFORE_SYNC_SCRIPT` and `AFTER_SYNC_SCRIPT`
+
+Hook scripts run inside the container as the configured `PUID`/`PGID`. They are intended for lightweight custom logic and are not suitable for host-level service management.
+
+```env
+BEFORE_SYNC_SCRIPT=/config/before-sync.sh
+AFTER_SYNC_SCRIPT=/config/after-sync.sh
 ```
 
 ### `CRYPTOMATOR_MOUNT_MODE`
