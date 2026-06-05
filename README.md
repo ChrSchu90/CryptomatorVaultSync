@@ -776,7 +776,7 @@ The container entrypoint and sync logic are split into multiple shell scripts:
 | `scripts/run.sh` | Container entrypoint. Selects one-shot or scheduled mode, validates startup configuration, and starts `supercronic` when `SYNC_CRON` is set. |
 | `scripts/sync.sh` | Executes one complete sync cycle: validates runtime paths, loads the vault password, mounts the vault, runs rsync, unmounts the vault, and optionally runs rclone/upstream checks. |
 | `scripts/healthcheck.sh` | Docker healthcheck script. In scheduled mode, reads `/state/current-status` and maps known states to healthy or unhealthy. |
-| `scripts/debug.sh` | Local helper script for manual image builds, debug runs, and interactive testing during development. |
+| `debug.sh` | Local helper script for manual image builds, debug runs, and interactive testing during development. |
 
 For manual debugging, `sync.sh` can also be executed directly inside a running container to trigger one sync cycle.
 
