@@ -132,7 +132,7 @@ switch_to_runtime_user_if_needed() {
 
   prepare_runtime_user_context
 
-  log_info "Restarting sync process as ${PUID}:${PGID} with umask ${UMASK}"
+  log_info "Switching sync process to ${PUID}:${PGID} with umask ${UMASK}"
 
   export SYNC_USER_CONTEXT_READY=true
   export HOME=/tmp/cryptomator-vault-sync-home
