@@ -90,6 +90,7 @@ docker_run_without_cleanup() {
     -v "./tests/rclone-remote:/rclone-remote" \
     -v "./tests/state:/state" \
     -v "./tests/config:/config:ro" \
+    -v "./tests/output:/output" \
     -e PUID="${HOST_UID}" \
     -e PGID="${HOST_GID}" \
     --cap-add SYS_ADMIN \
@@ -100,7 +101,34 @@ docker_run_without_cleanup() {
   exit_code="$?"
   set -e
 
-  fix_test_file_permissions
+  # Should not be needed anymore since container uses host UID and GID
+  #fix_test_file_permissions
+  return "$exit_code"
+}
+
+docker_run_capture_logs() {
+  local exit_code=0
+  set +e
+  docker run --rm \
+    -v "./tests/sync:/sync:ro" \
+    -v "./tests/vault:/vault-encrypted" \
+    -v "./tests/rclone-remote:/rclone-remote" \
+    -v "./tests/state:/state" \
+    -v "./tests/config:/config:ro" \
+    -v "./tests/output:/output" \
+    -e PUID="${HOST_UID}" \
+    -e PGID="${HOST_GID}" \
+    --cap-add SYS_ADMIN \
+    --device /dev/fuse:/dev/fuse \
+    --security-opt apparmor:unconfined \
+    "$@" \
+    "$IMAGE_NAME" \
+    > "./tests/output/container.log" 2>&1
+  exit_code="$?"
+  set -e
+
+  # Should not be needed anymore since container uses host UID and GID
+  #fix_test_file_permissions
   return "$exit_code"
 }
 
@@ -241,6 +269,17 @@ printf '2026-05-30 22:10:00 unknown\n' > ./tests/state/current-status
 assert_exit_code 1 \
   docker_run_healthcheck \
     -e SYNC_CRON="*/5 * * * *"
+
+log "TEST: PUID and PGID runtime user"
+docker_cleanup
+assert_exit_code 0 \
+  docker_run_capture_logs \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}"
+assert_file_contains_text ./tests/output/container.log "Preparing sync runtime user: ${HOST_UID}:${HOST_GID}"
+assert_file_contains_text ./tests/output/container.log "Switching sync process to ${HOST_UID}:${HOST_GID}"
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+rm -f ./tests/state/current-status
 
 log "TEST: Invalid PUID"
 assert_exit_code 2 \
