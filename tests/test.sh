@@ -206,6 +206,80 @@ assert_file_contains_text() {
   log "PASSED: $file contains expected text"
 }
 
+assert_unlocked_vault_file_content() {
+  local encrypted_vault_dir="$1"
+  local vault_file="$2"
+  local expected_file="$3"
+
+  docker run --rm \
+    -v "${encrypted_vault_dir}:/vault-encrypted" \
+    -v "${expected_file}:/expected-file:ro" \
+    --cap-add SYS_ADMIN \
+    --device /dev/fuse:/dev/fuse \
+    --security-opt apparmor:unconfined \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e VAULT_FILE="$vault_file" \
+    "$IMAGE_NAME" \
+    bash -c '
+      set -Eeuo pipefail
+
+      mkdir -p /vault-check
+
+      printf "%s\n" "$CRYPTOMATOR_VAULT_PASSWORD" > /tmp/vault-password
+      chmod 600 /tmp/vault-password
+
+      cryptomator-cli unlock \
+        --password:stdin \
+        --mounter=org.cryptomator.frontend.fuse.mount.LinuxFuseMountProvider \
+        --mountPoint=/vault-check \
+        /vault-encrypted \
+        < /tmp/vault-password \
+        >/tmp/cryptomator-check.log 2>&1 &
+
+      pid="$!"
+
+      cleanup_check_mount() {
+        fusermount3 -u /vault-check 2>/dev/null || \
+          fusermount -u /vault-check 2>/dev/null || \
+          umount /vault-check 2>/dev/null || \
+          umount -l /vault-check 2>/dev/null || \
+          true
+
+        if kill -0 "$pid" 2>/dev/null; then
+          kill -TERM "$pid" 2>/dev/null || true
+          wait "$pid" 2>/dev/null || true
+        fi
+      }
+
+      trap cleanup_check_mount EXIT
+
+      for _ in $(seq 1 30); do
+        if mountpoint -q /vault-check; then
+          break
+        fi
+
+        if ! kill -0 "$pid" 2>/dev/null; then
+          cat /tmp/cryptomator-check.log >&2 || true
+          exit 1
+        fi
+
+        sleep 1
+      done
+
+      if ! mountpoint -q /vault-check; then
+        cat /tmp/cryptomator-check.log >&2 || true
+        exit 1
+      fi
+
+      if [[ ! -f "/vault-check/$VAULT_FILE" ]]; then
+        echo "Expected file does not exist in unlocked vault: $VAULT_FILE"
+        exit 1
+      fi
+
+      cmp /expected-file "/vault-check/$VAULT_FILE"
+    '
+}
+
 trap cleanup EXIT
 
 log "Preparing test directories and files..."
@@ -786,5 +860,42 @@ assert_exit_code 2 \
     -e BEFORE_SYNC_SCRIPT=/config/before-sync.sh
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "BEFORE_SYNC_SCRIPT is not executable"
+
+log "TEST: Synced file content is readable from local unlocked vault"
+docker_cleanup
+mkdir -p ./tests/sync/content-check
+cat > ./tests/sync/content-check/test.txt <<'EOF'
+hello from local content check
+this must not become an empty file
+EOF
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}"
+assert_unlocked_vault_file_content \
+  "$(pwd)/tests/vault" \
+  "content-check/test.txt" \
+  "$(pwd)/tests/sync/content-check/test.txt"
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: Synced file content is readable from upstream unlocked vault"
+docker_cleanup
+mkdir -p ./tests/sync/upstream-content-check
+cat > ./tests/sync/upstream-content-check/test.txt <<'EOF'
+hello from upstream content check
+this verifies rclone copied a usable encrypted vault
+EOF
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UPSTREAM_ENABLED=true \
+    -e UPSTREAM_FAIL_ACTION=exit \
+    -e UPSTREAM_DESTINATIONS=remote:temp-vault
+assert_unlocked_vault_file_content \
+  "$(pwd)/tests/rclone-remote/temp-vault" \
+  "upstream-content-check/test.txt" \
+  "$(pwd)/tests/sync/upstream-content-check/test.txt"
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
 
 log "All tests passed!"
