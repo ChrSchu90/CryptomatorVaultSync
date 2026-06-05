@@ -4,6 +4,8 @@ cd "$(dirname "$0")/.." || exit 1
 
 IMAGE_NAME=cryptomator-vault-sync:test
 VAULT_PASSWORD=cryptomator-vault-sync
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
 
 log() {
   printf '\033[92m[%s] %s\033[0m\n' "$(date '+%H:%M:%S')" "$*"
@@ -18,9 +20,17 @@ exit_failed() {
   exit 1
 }
 
+fix_test_file_permissions() {
+  docker run --rm \
+    -v "./tests:/tests" \
+    "$IMAGE_NAME" \
+    sh -c "chown -R ${HOST_UID}:${HOST_GID} /tests/rclone-remote /tests/sync /tests/vault /tests/state /tests/config /tests/output 2>/dev/null || true; chmod -R u+rwX /tests/rclone-remote /tests/sync /tests/vault /tests/state /tests/config /tests/output 2>/dev/null || true" \
+    >/dev/null 2>&1 || true
+}
+
 cleanup() {
   fix_test_file_permissions
-  rm -rf ./tests/rclone-remote ./tests/sync ./tests/vault ./tests/state ./tests/config
+  rm -rf ./tests/rclone-remote ./tests/sync ./tests/vault ./tests/state ./tests/config ./tests/output
   docker image rm "$IMAGE_NAME" >/dev/null 2>&1 || true
 }
 
@@ -49,20 +59,18 @@ create_state_dir() {
   mkdir -p ./tests/state
 }
 
+create_output_dir() {
+  rm -rf ./tests/output
+  mkdir -p ./tests/output
+}
+
 docker_cleanup() {
+  create_output_dir
   create_sync_dir
   create_temp_vault
   create_temp_config
   create_rclone_dir
   create_state_dir
-}
-
-fix_test_file_permissions() {
-  docker run --rm \
-    -v "./tests:/tests" \
-    "$IMAGE_NAME" \
-    sh -c 'chmod -R a+rwX /tests/rclone-remote /tests/sync /tests/vault 2>/dev/null || true' \
-    >/dev/null 2>&1 || true
 }
 
 docker_run_healthcheck() {
@@ -82,6 +90,9 @@ docker_run_without_cleanup() {
     -v "./tests/rclone-remote:/rclone-remote" \
     -v "./tests/state:/state" \
     -v "./tests/config:/config:ro" \
+    -v "./tests/output:/output" \
+    -e PUID="${HOST_UID}" \
+    -e PGID="${HOST_GID}" \
     --cap-add SYS_ADMIN \
     --device /dev/fuse:/dev/fuse \
     --security-opt apparmor:unconfined \
@@ -90,7 +101,34 @@ docker_run_without_cleanup() {
   exit_code="$?"
   set -e
 
-  fix_test_file_permissions
+  # Should not be needed anymore since container uses host UID and GID
+  #fix_test_file_permissions
+  return "$exit_code"
+}
+
+docker_run_capture_logs() {
+  local exit_code=0
+  set +e
+  docker run --rm \
+    -v "./tests/sync:/sync:ro" \
+    -v "./tests/vault:/vault-encrypted" \
+    -v "./tests/rclone-remote:/rclone-remote" \
+    -v "./tests/state:/state" \
+    -v "./tests/config:/config:ro" \
+    -v "./tests/output:/output" \
+    -e PUID="${HOST_UID}" \
+    -e PGID="${HOST_GID}" \
+    --cap-add SYS_ADMIN \
+    --device /dev/fuse:/dev/fuse \
+    --security-opt apparmor:unconfined \
+    "$@" \
+    "$IMAGE_NAME" \
+    > "./tests/output/container.log" 2>&1
+  exit_code="$?"
+  set -e
+
+  # Should not be needed anymore since container uses host UID and GID
+  #fix_test_file_permissions
   return "$exit_code"
 }
 
@@ -232,6 +270,44 @@ assert_exit_code 1 \
   docker_run_healthcheck \
     -e SYNC_CRON="*/5 * * * *"
 
+log "TEST: PUID and PGID runtime user"
+docker_cleanup
+assert_exit_code 0 \
+  docker_run_capture_logs \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}"
+assert_file_contains_text ./tests/output/container.log "Preparing sync runtime user: ${HOST_UID}:${HOST_GID}"
+assert_file_contains_text ./tests/output/container.log "Switching sync process to ${HOST_UID}:${HOST_GID}"
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+rm -f ./tests/state/current-status
+
+log "TEST: Invalid PUID"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e PUID=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "PUID must be a non-negative integer"
+
+log "TEST: Invalid PGID"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e PGID=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "PGID must be a non-negative integer"
+
+log "TEST: Invalid UMASK"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e UMASK=invalid
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "UMASK must be a valid octal file mode mask"
+
 log "TEST: Missing vault password"
 assert_exit_code 2 \
   docker_run
@@ -304,7 +380,7 @@ log "TEST: Invalid CRYPTOMATOR_MOUNT_MODE"
 assert_exit_code 2 \
   docker_run \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
-    -e CRYPTOMATOR_MOUNT_MODE=invalid
+    -e CRYPTOMATOR_MOUNT_MODE=auto
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "Invalid CRYPTOMATOR_MOUNT_MODE:"
 
@@ -315,6 +391,15 @@ assert_exit_code 2 \
     -e RSYNC_DELETE=invalid
 assert_file_contains_status ./tests/state/current-status failed
 assert_file_contains_text ./tests/state/last-error "RSYNC_DELETE must be true or false"
+
+log "TEST: Invalid RSYNC_INPLACE"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e RSYNC_INPLACE=auto
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_exists ./tests/state/last-error
+assert_file_contains_text ./tests/state/last-error "RSYNC_INPLACE must be true or false"
 
 log "TEST: Invalid RSYNC_EXCLUDE_FILE"
 assert_exit_code 2 \
@@ -509,6 +594,16 @@ after="$(find ./tests/vault -type f -printf '%P %s\n' | sort | sha256sum | awk '
 if [[ "$before" != "$after" ]]; then
   exit_failed "FAILED: Vault changed even though only excluded files were present"
 fi
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: RSYNC_INPLACE true"
+docker_cleanup
+echo "hello from inplace true test" > ./tests/sync/test-file.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e RSYNC_INPLACE=true
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
 

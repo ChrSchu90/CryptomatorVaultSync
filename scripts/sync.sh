@@ -9,7 +9,9 @@ set -Eeuo pipefail
 load_config_defaults
 
 CRYPTOMATOR_PID=""
+ACTIVE_MOUNT_MODE=""
 SYNC_LOCK_FILE="/tmp/cryptomator-vault-sync.lock"
+SYNC_USER_CONTEXT_READY="${SYNC_USER_CONTEXT_READY:-false}"
 
 acquire_sync_lock() {
   exec 9>"$SYNC_LOCK_FILE"
@@ -71,6 +73,77 @@ trap cleanup EXIT
 trap 'cleanup; exit "$EXIT_OK"' INT
 trap 'cleanup; exit "$EXIT_OK"' TERM
 
+ensure_runtime_user_exists() {
+  local user_name="syncuser"
+  local group_name="syncgroup"
+
+  if ! getent group "$PGID" >/dev/null 2>&1; then
+    log_info "Creating runtime group ${group_name} with GID ${PGID}"
+    groupadd --gid "$PGID" "$group_name"
+  else
+    group_name="$(getent group "$PGID" | cut -d: -f1)"
+  fi
+
+  if ! getent passwd "$PUID" >/dev/null 2>&1; then
+    log_info "Creating runtime user ${user_name} with UID ${PUID} and GID ${PGID}"
+    useradd \
+      --uid "$PUID" \
+      --gid "$PGID" \
+      --home-dir /tmp/cryptomator-vault-sync-home \
+      --shell /usr/sbin/nologin \
+      "$user_name"
+  fi
+}
+
+prepare_runtime_user_context() {
+  log_info "Preparing sync runtime user: ${PUID}:${PGID}"
+
+  ensure_runtime_user_exists
+
+  mkdir -p "$VAULT_DECRYPTED_DIR" "$STATE_DIR" /tmp/cryptomator-vault-sync-home
+
+  chown "$PUID:$PGID" "$VAULT_DECRYPTED_DIR" 2>/dev/null || true
+  chown "$PUID:$PGID" "$STATE_DIR" 2>/dev/null || true
+  chown "$PUID:$PGID" "$STATE_DIR"/* 2>/dev/null || true
+  chown "$PUID:$PGID" /tmp/cryptomator-vault-sync-home 2>/dev/null || true
+
+  chmod 700 /tmp/cryptomator-vault-sync-home 2>/dev/null || true
+}
+
+switch_to_runtime_user_if_needed() {
+  if [[ "$SYNC_USER_CONTEXT_READY" == "true" ]]; then
+    umask "$UMASK"
+    return 0
+  fi
+
+  if [[ "$(id -u)" != "0" ]]; then
+    log_info "Sync process is already running as $(id -u):$(id -g)."
+    export SYNC_USER_CONTEXT_READY=true
+    umask "$UMASK"
+    return 0
+  fi
+
+  if [[ "$PUID" == "0" && "$PGID" == "0" ]]; then
+    log_info "Sync process will run as root because PUID=0 and PGID=0."
+    export SYNC_USER_CONTEXT_READY=true
+    umask "$UMASK"
+    return 0
+  fi
+
+  prepare_runtime_user_context
+
+  log_info "Switching sync process to ${PUID}:${PGID} with umask ${UMASK}"
+
+  export SYNC_USER_CONTEXT_READY=true
+  export HOME=/tmp/cryptomator-vault-sync-home
+
+  exec setpriv \
+    --reuid "$PUID" \
+    --regid "$PGID" \
+    --clear-groups \
+    -- "$0" "$@"
+}
+
 wait_for_mountpoint() {
   local timeout_seconds="${1:-60}"
   local current_dev=""
@@ -92,14 +165,27 @@ wait_for_mountpoint() {
   return 1
 }
 
-sync_once() {
+sync_once_webdav() {
+  # Future implementation:
+  # - use the Cryptomator WebDAV endpoint directly
+  # - do not mount it via davfs2
+  # - likely use rclone or curl-based WebDAV operations
+  exit_failed "$EXIT_GENERAL_ERROR" "WebDAV sync mode is currently not supported"
+}
+
+sync_once_fuse() {
   local dry_run_args=()
   local exclude_args=()
   local delete_args=()
+  local inplace_args=()
 
   if [[ "$DRY_RUN" == "true" ]]; then
     dry_run_args=(--dry-run)
     log_warn "DRY_RUN enabled. No files will be written to the vault."
+  fi
+
+  if [[ "$RSYNC_INPLACE" == "true" ]]; then
+    inplace_args=(--inplace)
   fi
 
   if [[ -n "${RSYNC_EXCLUDE_FILE:-}" ]]; then
@@ -116,9 +202,11 @@ sync_once() {
     log_info "Running rsync syncing $SYNC_DIR/ -> $VAULT_DECRYPTED_DIR/"
   fi
 
+  log_info "Rsync args: $RSYNC_ARGS ${dry_run_args[*]} ${delete_args[*]} ${exclude_args[*]} ${inplace_args[*]} $RSYNC_EXTRA_ARGS"
+
   set +e
   # shellcheck disable=SC2086
-  rsync $RSYNC_ARGS "${dry_run_args[@]}" "${delete_args[@]}" "${exclude_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
+  rsync $RSYNC_ARGS "${dry_run_args[@]}" "${delete_args[@]}" "${exclude_args[@]}" "${inplace_args[@]}" $RSYNC_EXTRA_ARGS "$SYNC_DIR"/ "$VAULT_DECRYPTED_DIR"/
   local rsync_exit_code="$?"
   set -e
 
@@ -127,6 +215,20 @@ sync_once() {
   fi
 
   log_info "Rsync finished."
+}
+
+sync_once() {
+  case "$ACTIVE_MOUNT_MODE" in
+    fuse)
+      sync_once_fuse
+      ;;
+    webdav)
+      sync_once_webdav
+      ;;
+    *)
+      exit_failed "$EXIT_GENERAL_ERROR" "No active mount mode selected"
+      ;;
+  esac
 }
 
 unlock_fuse() {
@@ -164,6 +266,7 @@ unlock_fuse() {
     return 1
   fi
 
+  ACTIVE_MOUNT_MODE="fuse"
   log_info "Vault unlocked via FUSE."
 }
 
@@ -172,10 +275,6 @@ unlock_webdav() {
 
   local cryptomator_log="/tmp/cryptomator-webdav.log"
   local password_file="/tmp/cryptomator-password"
-  local davfs_error_log="/tmp/davfs2-mount-error.log"
-  local davfs_secrets_tmp="/tmp/davfs2-secrets"
-  local davfs_user="cryptomator"
-  local davfs_pass="cryptomator"
 
   local webdav_host="127.0.0.1"
   local webdav_port="59317"
@@ -183,7 +282,6 @@ unlock_webdav() {
   local webdav_url="http://${webdav_host}:${webdav_port}/${webdav_volume_id}/"
 
   : > "$cryptomator_log"
-  : > "$davfs_error_log"
 
   umask 077
   printf '%s\n' "$VAULT_PASSWORD" > "$password_file"
@@ -204,13 +302,11 @@ unlock_webdav() {
 
   log_info "Waiting for Cryptomator WebDAV endpoint: $webdav_url"
 
-  local endpoint_available="false"
-
   for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
     if curl --silent --fail --show-error --max-time 1 "$webdav_url" >/dev/null 2>&1; then
-      endpoint_available="true"
-      log_info "Cryptomator WebDAV endpoint is available."
-      break
+      ACTIVE_MOUNT_MODE="webdav"
+      log_info "Cryptomator WebDAV endpoint is available: $webdav_url"
+      return 0
     fi
 
     if [[ -n "${CRYPTOMATOR_PID}" ]] && ! kill -0 "$CRYPTOMATOR_PID" 2>/dev/null; then
@@ -222,43 +318,8 @@ unlock_webdav() {
     sleep 1
   done
 
-  if [[ "$endpoint_available" != "true" ]]; then
-    log_error "Cryptomator WebDAV endpoint did not become available in time."
-    cat "$cryptomator_log" >&2 || true
-    return 1
-  fi
-
-  log_info "Preparing davfs2 credentials..."
-
-  mkdir -p /etc/davfs2
-  touch /etc/davfs2/secrets
-  chmod 600 /etc/davfs2/secrets
-
-  grep -vF "$webdav_url" /etc/davfs2/secrets > "$davfs_secrets_tmp" || true
-  mv "$davfs_secrets_tmp" /etc/davfs2/secrets
-
-  printf '%s %s %s\n' "$webdav_url" "$davfs_user" "$davfs_pass" >> /etc/davfs2/secrets
-  chmod 600 /etc/davfs2/secrets
-
-  log_info "Mounting WebDAV endpoint to $VAULT_DECRYPTED_DIR"
-
-  for _ in $(seq 1 "$MOUNT_TIMEOUT_SECONDS"); do
-    : > "$davfs_error_log"
-
-    if mount -t davfs \
-      -o uid="$(id -u)",gid="$(id -g)",rw,nouser \
-      "$webdav_url" \
-      "$VAULT_DECRYPTED_DIR" \
-      2>"$davfs_error_log"; then
-      log_info "Vault unlocked via WebDAV and mounted to $VAULT_DECRYPTED_DIR."
-      return 0
-    fi
-
-    sleep 1
-  done
-
-  log_error "WebDAV mount failed."
-  cat "$davfs_error_log" >&2 || true
+  log_error "Cryptomator WebDAV endpoint did not become available in time."
+  cat "$cryptomator_log" >&2 || true
   return 1
 }
 
@@ -270,13 +331,8 @@ mount_vault() {
     webdav)
       unlock_webdav || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using WebDAV"
       ;;
-    auto)
-      if ! unlock_fuse; then
-        log_warn "FUSE mount failed, trying WebDAV fallback..."
-        cleanup_resources
-        require_empty_mountpoint
-        unlock_webdav || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using FUSE and WebDAV fallback"
-      fi
+    *)
+      exit_failed "$EXIT_GENERAL_ERROR" "Invalid mount mode: $CRYPTOMATOR_MOUNT_MODE"
       ;;
   esac
 }
@@ -320,6 +376,7 @@ run_rclone_check() {
   fi
 
   log_info "Running rclone check $VAULT_ENCRYPTED_DIR -> $destination"
+  log_info "Rclone check args: check $VAULT_ENCRYPTED_DIR $destination --config $UPSTREAM_CONFIG $UPSTREAM_EXTRA_ARGS"
 
   set +e
   # shellcheck disable=SC2086
@@ -364,6 +421,7 @@ run_rclone() {
     destination_count="$((destination_count + 1))"
 
     log_info "Running rclone $UPSTREAM_MODE $VAULT_ENCRYPTED_DIR -> $destination"
+    log_info "Rclone args: $UPSTREAM_MODE $VAULT_ENCRYPTED_DIR $destination --config $UPSTREAM_CONFIG $UPSTREAM_EXTRA_ARGS"
 
     set +e
     # shellcheck disable=SC2086
@@ -415,6 +473,7 @@ sync_cycle() {
 }
 
 main() {
+  switch_to_runtime_user_if_needed "$@"
   acquire_sync_lock
   validate_config
   validate_sync_runtime

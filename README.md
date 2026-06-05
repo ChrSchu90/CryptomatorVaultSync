@@ -30,6 +30,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
   - [`/state`](#state)
 - [⚙️ Configuration](#️-configuration)
   - [`RSYNC_DELETE`](#rsync_delete)
+  - [`RSYNC_INPLACE`](#rsync_inplace)
   - [`RSYNC_ARGS`](#rsync_args)
   - [`RSYNC_EXTRA_ARGS`](#rsync_extra_args)
   - [`UPSTREAM_MODE`](#upstream_mode)
@@ -84,12 +85,11 @@ Files that already exist inside the Cryptomator vault are not copied back to `/s
 
 ## ✔️ Features
 
+- `PUID` and `PGID` to ensure correct file permissions for mounted host directories, especially on NAS systems.
 - One-way sync from a plain source directory into a Cryptomator vault
 - Docker-based one-shot or cron-based scheduled operation
 - Non-overlapping scheduled sync cycles via internal locking
-- FUSE mount mode
-- WebDAV fallback mode using `davfs2`
-- `auto` mount mode: tries FUSE first, falls back to WebDAV
+- `FUSE` mount mode
 - `rsync` based file transfer
 - Optional `RSYNC_DELETE=true`
 - Optional rsync exclude file
@@ -242,16 +242,29 @@ Possible `current-status` values:
 
 ## ⚙️ Configuration
 
+> [!IMPORTANT]
+> The configured `PUID`/`PGID` must have read access to `/sync` 
+> and write access to `/vault-encrypted` and `/state`.
+> 
+> use `id` command to find the correct ids
+> ```bash
+> id <user>
+> ```
+
 | Variable | Default | Description |
 |---|---:|---|
+| `PUID` | `1000` | User ID used to run the sync process, including Cryptomator CLI and rsync. |
+| `PGID` | `1000` | Group ID used to run the sync process. |
+| `UMASK` | `022` | File creation mask used by the sync process. |
 | `CRYPTOMATOR_VAULT_PASSWORD` | required if no password file is used | Password for the Cryptomator vault. If both password variables are set, this value takes precedence. |
 | `CRYPTOMATOR_VAULT_PASSWORD_FILE` | unset | Full path to a file containing the Cryptomator vault password. Used only when `CRYPTOMATOR_VAULT_PASSWORD` is not set. |
-| `CRYPTOMATOR_MOUNT_MODE` | `auto` | Mount mode: `fuse`, `webdav`, or `auto`. See [Cryptomator mount modes](#cryptomator_mount_mode). |
+| `CRYPTOMATOR_MOUNT_MODE` | `fuse` | Mount/sync mode. `fuse` performs the local rsync sync. `webdav` starts the Cryptomator WebDAV endpoint but sync is currently not supported. See [Cryptomator mount modes](#cryptomator_mount_mode) |
 | `DRY_RUN` | `false` | Runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. `/state/last-success` is not updated. |
 | `SYNC_DIR` | `/sync` | Source directory inside the container. |
 | `VAULT_ENCRYPTED_DIR` | `/vault-encrypted` | Encrypted vault directory inside the container. |
 | `STATE_DIR` | `/state` | Directory for state files. |
 | `RSYNC_DELETE` | `false` | If `true`, delete files in the vault that no longer exist in `/sync`. Only enable this if `/sync` is the authoritative source. Use `DRY_RUN=true` first to review what would be deleted. |
+| `RSYNC_INPLACE` | `false` | Enables rsync `--inplace` when set to `true`. Disabled by default. |
 | `RSYNC_EXCLUDE_FILE` | empty | Optional path to an rsync exclude file. See [Rsync exclude file](#rsync_exclude_file). |
 | `RSYNC_ARGS` | `-rtvi --no-owner --no-group --no-perms` | Base rsync arguments. |
 | `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |
@@ -273,6 +286,14 @@ When enabled, files that no longer exist in `/sync` will also be deleted from th
 
 Before enabling this option for the first time, run with `DRY_RUN=true` and review the rsync output.
 
+### `RSYNC_INPLACE`
+
+`RSYNC_INPLACE` controls whether `rsync` uses `--inplace`. Inplace writes updated files directly instead of using rsync's default temporary-file-and-rename behavior.
+
+```env
+RSYNC_INPLACE=false
+```
+
 ### `RSYNC_ARGS`
 
 ```env
@@ -293,6 +314,8 @@ RSYNC_ARGS=-rtvi --no-owner --no-group --no-perms
 
 `RSYNC_EXTRA_ARGS` can be used to pass additional arguments to `rsync`. These arguments are appended to the default `RSYNC_ARGS`. For all available options, see the [rsync(1) man page](https://www.man7.org/linux/man-pages/man1/rsync.1.html).
 
+Be aware that `RSYNC_ARGS` and `RSYNC_EXTRA_ARGS` are included in the logged rsync arguments, so sensitive values passed there may appear in the container logs.
+
 ```env
 # Use checksums instead of size and modification time to detect changed files
 RSYNC_EXTRA_ARGS=--checksum
@@ -306,6 +329,17 @@ RSYNC_EXTRA_ARGS=--max-size=500M
 # Limit bandwidth to approximately 5000 KiB/s
 RSYNC_EXTRA_ARGS=--bwlimit=5000
 ```
+
+### `RSYNC_EXCLUDE_FILE`
+
+You can exclude files or directories from the local sync with an rsync exclude file. The file is passed to rsync via `--exclude-from`.
+
+Patterns are interpreted relative to the `/sync` source directory. [See example rsync-exclude.txt](/example/config/rsync-exclude.txt)
+
+```env
+RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
+```
+
 
 ### `UPSTREAM_MODE`
 
@@ -330,6 +364,8 @@ UPSTREAM_CHECK=true
 
 `UPSTREAM_EXTRA_ARGS` can be used to pass additional arguments to `rclone`. These arguments are appended to the rclone command. See the official [rclone global flags documentation](https://rclone.org/flags/).
 
+The effective rclone command arguments are logged before execution to make debugging easier. Be aware that `UPSTREAM_EXTRA_ARGS` is included in the logged rclone arguments, so sensitive values passed there may appear in the container logs.
+
 ```env
 # Limit rclone bandwidth to 8M
 UPSTREAM_EXTRA_ARGS=--bwlimit 8M
@@ -344,23 +380,17 @@ UPSTREAM_EXTRA_ARGS=--drive-chunk-size 64M
 UPSTREAM_EXTRA_ARGS=-vv
 ```
 
-### `RSYNC_EXCLUDE_FILE`
-
-You can exclude files or directories from the local sync with an rsync exclude file. The file is passed to rsync via `--exclude-from`.
-
-Patterns are interpreted relative to the `/sync` source directory. [See example rsync-exclude.txt](/example/config/rsync-exclude.txt)
-
-```env
-RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
-```
-
 ### `CRYPTOMATOR_MOUNT_MODE`
+
+> [!NOTE]
+> WebDAV currently starts the Cryptomator WebDAV endpoint but does not perform the local sync yet.
+> Support is planned, but currently exits with an error after the endpoint has been verified.
 
 | Option   | Meaning                            |
 | -------- | ---------------------------------- |
-| `fuse`   | Uses Cryptomator CLI's Linux FUSE mount provider.     |
 | `webdav`   | Uses Cryptomator CLI's WebDAV fallback mounter, detects the generated WebDAV URL from the CLI output, and mounts it internally using `davfs2`.       |
-| `auto`   | Tries FUSE first. If FUSE fails, it cleans up and tries WebDAV. This is the default.       |
+| `fuse`   | Uses Cryptomator CLI's Linux FUSE mount provider.     |
+
 
 To check `FUSE` availability on the host:
 

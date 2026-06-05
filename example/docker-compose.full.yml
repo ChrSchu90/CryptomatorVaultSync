@@ -13,12 +13,15 @@ services:
     environment:
       CRYPTOMATOR_VAULT_PASSWORD: "MyVaultPassword"             # Required
       #CRYPTOMATOR_VAULT_PASSWORD_FILE: /config/vault-password  # Optional replacement for CRYPTOMATOR_VAULT_PASSWORD
+      PUID: 1000                                                # Optional [default=1000] User ID used to run the sync process 
+      PGID: 1000                                                # Optional [default=1000] Group ID used to run the sync process
       SYNC_DIR: /sync                                           # Optional [default=/sync]
       VAULT_ENCRYPTED_DIR: /vault-encrypted                     # Optional [default=/vault-encrypted]
-      CRYPTOMATOR_MOUNT_MODE: auto                              # Optional [default=auto] fuse, webdav, auto
+      CRYPTOMATOR_MOUNT_MODE: fuse                              # Optional [default=fuse] fuse, webdav
       MOUNT_TIMEOUT_SECONDS: 60                                 # Optional [default=60]
       SYNC_CRON: ""                                             # Optional [default=] empty=one-shot, cron expression=scheduled mode
       RSYNC_DELETE: false                                       # Optional [default=false] Do not enable unless /sync is intended to be the authoritative source!
+      RSYNC_INPLACE: false                                      # Optional [default=false] --inplace for rsync
       RSYNC_EXCLUDE_FILE: /config/rsync-exclude.txt             # Optional [default=] file that is used for rsync --exclude-from "$RSYNC_EXCLUDE_FILE"
       RSYNC_ARGS: '-rtvi --no-owner --no-group --no-perms'      # Optional [default=-rtvi --no-owner --no-group --no-perms]
       RSYNC_EXTRA_ARGS:                                         # Optional [default=]
