@@ -90,7 +90,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # /vault-decrypted  Internal temporary mount point. The host usually cannot see its contents because the mount is created inside the container namespace.
 # /state            Optional state files for healthcheck
 # /config           Optional config files such as rclone.conf, vault-password, and rsync-exclude.txt
-VOLUME ["/sync", "/vault-encrypted", "/config", "/state"]
+# VOLUME ["/sync", "/vault-encrypted", "/config", "/state"]
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/run.sh"]
