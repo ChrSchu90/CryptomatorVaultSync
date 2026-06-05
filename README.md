@@ -279,6 +279,29 @@ Possible `current-status` values:
 | `UPSTREAM_EXTRA_ARGS` | empty | Additional arguments passed to rclone. |
 | `UPSTREAM_START_DELAY_SECONDS` | `0` | Optional delay after unmounting the vault before running rclone. |
 
+### `CRYPTOMATOR_MOUNT_MODE`
+
+> [!NOTE]
+> WebDAV currently starts the Cryptomator WebDAV endpoint but does not perform the local sync yet.
+> Support is planned, but currently exits with an error after the endpoint has been verified.
+
+| Option   | Meaning                            |
+| -------- | ---------------------------------- |
+| `fuse`   | Uses Cryptomator CLI's Linux FUSE mount provider.     |
+| `webdav`   | ***NOT SUPOORTED YET*** Uses Cryptomator CLI's WebDAV fallback mounter and mounts it internally.       |
+
+To check `FUSE` availability on the host:
+
+```bash
+ls -l /dev/fuse
+```
+
+A typical successful result looks like:
+
+```text
+crw-rw-rw- 1 root users 10, 229 ... /dev/fuse
+```
+
 ### `RSYNC_DELETE`
 
 Only enable `RSYNC_DELETE=true` if `/sync` is the authoritative source.
@@ -340,7 +363,6 @@ Patterns are interpreted relative to the `/sync` source directory. [See example 
 RSYNC_EXCLUDE_FILE=/config/rsync-exclude.txt
 ```
 
-
 ### `UPSTREAM_MODE`
 
 `UPSTREAM_MODE` controls how rclone writes `/vault-encrypted` to the configured upstream destination.
@@ -378,30 +400,6 @@ UPSTREAM_EXTRA_ARGS=--drive-chunk-size 64M
 
 # Enable verbose rclone logging for debugging
 UPSTREAM_EXTRA_ARGS=-vv
-```
-
-### `CRYPTOMATOR_MOUNT_MODE`
-
-> [!NOTE]
-> WebDAV currently starts the Cryptomator WebDAV endpoint but does not perform the local sync yet.
-> Support is planned, but currently exits with an error after the endpoint has been verified.
-
-| Option   | Meaning                            |
-| -------- | ---------------------------------- |
-| `webdav`   | Uses Cryptomator CLI's WebDAV fallback mounter, detects the generated WebDAV URL from the CLI output, and mounts it internally using `davfs2`.       |
-| `fuse`   | Uses Cryptomator CLI's Linux FUSE mount provider.     |
-
-
-To check `FUSE` availability on the host:
-
-```bash
-ls -l /dev/fuse
-```
-
-A typical successful result looks like:
-
-```text
-crw-rw-rw- 1 root users 10, 229 ... /dev/fuse
 ```
 
 ## 💻 Docker run
