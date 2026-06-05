@@ -29,7 +29,8 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
   - [`/config`](#config)
   - [`/state`](#state)
 - [⚙️ Configuration](#️-configuration)
-  - [`PUID, PGID, UMASK and CRYPTOMATOR_VAULT_FIX_PERMISSIONS`](#puid-pgid-umask-and-cryptomator_vault_fix_permissions)
+  - [`PUID`, `PGID`, `UMASK` and `CRYPTOMATOR_VAULT_FIX_PERMISSIONS`](#puid-pgid-umask-and-cryptomator_vault_fix_permissions)
+    - [Synology Cloud Sync and Docker bind mounts](#synology-cloud-sync-and-docker-bind-mounts)
   - [`CRYPTOMATOR_MOUNT_MODE`](#cryptomator_mount_mode)
   - [`RSYNC_DELETE`](#rsync_delete)
   - [`RSYNC_INPLACE`](#rsync_inplace)
@@ -332,7 +333,6 @@ Example Docker Compose configuration:
 ```yml
 services:
   cryptomator-vault-sync:
-    network_mode: host # Required when using addr=127.0.0.1 for the NFS volume
     volumes:
       - cloud-nfs-vault:/vault-encrypted
       - ...
@@ -345,9 +345,6 @@ volumes:
       o: addr=127.0.0.1,nfsvers=4,rw
       device: ":/volume1/Cloud/MyVault"
 ```
-
-> [!NOTE]
-> `network_mode: none` cannot be used with this setup because the NFS-backed Docker volume requires network access.
 
 ### `CRYPTOMATOR_MOUNT_MODE`
 
