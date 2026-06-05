@@ -71,6 +71,28 @@ fix_cryptomator_vault_permissions() {
   find "$VAULT_ENCRYPTED_DIR" -type d -exec chmod g+s {} \;
 }
 
+run_hook_script() {
+  local script_path="$1"
+  local name="$2"
+
+  if [[ -z "$script_path" ]]; then
+    return 0
+  fi
+
+  log_info "Running $name: $script_path"
+
+  set +e
+  "$script_path"
+  local hook_exit_code="$?"
+  set -e
+
+  if [[ "$hook_exit_code" -ne 0 ]]; then
+    exit_failed "$EXIT_GENERAL_ERROR" "$name failed with exit code $hook_exit_code"
+  fi
+
+  log_info "$name finished."
+}
+
 cleanup() {
   trap - EXIT INT TERM
   cleanup_resources
@@ -464,6 +486,8 @@ run_rclone() {
 sync_cycle() {
   write_status "current-status" "running"
 
+  run_hook_script "$BEFORE_SYNC_SCRIPT" "BEFORE_SYNC_SCRIPT"
+
   mount_vault
   sync_once
   cleanup_resources
@@ -474,6 +498,8 @@ sync_cycle() {
     write_status "last-error" "sync cycle finished with upstream error"
     return 0
   fi
+
+  run_hook_script "$AFTER_SYNC_SCRIPT" "AFTER_SYNC_SCRIPT"
 
   if [[ "$DRY_RUN" == "true" ]]; then
     log_warn "DRY_RUN finished successfully. last-success was not updated."

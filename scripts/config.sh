@@ -6,6 +6,9 @@ load_config_defaults() {
   PGID="${PGID:-1000}"
   UMASK="${UMASK:-022}"
 
+  BEFORE_SYNC_SCRIPT="${BEFORE_SYNC_SCRIPT:-}"
+  AFTER_SYNC_SCRIPT="${AFTER_SYNC_SCRIPT:-}"
+
   DRY_RUN="${DRY_RUN:-false}"
   SYNC_CRON="${SYNC_CRON:-}"
 
@@ -90,6 +93,27 @@ has_valid_upstream_destination() {
   return 1
 }
 
+validate_hook_script() {
+  local script_path="$1"
+  local name="$2"
+
+  if [[ -z "$script_path" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "$script_path" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "$name does not exist: $script_path"
+  fi
+
+  if [[ ! -r "$script_path" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "$name is not readable: $script_path"
+  fi
+
+  if [[ ! -x "$script_path" ]]; then
+    exit_failed "$EXIT_CONFIG_ERROR" "$name is not executable: $script_path"
+  fi
+}
+
 validate_cron_expression() {
   if [[ -z "$SYNC_CRON" ]]; then
     return 0
@@ -109,6 +133,8 @@ validate_cron_expression() {
 
 validate_config() {
   validate_cron_expression
+  validate_hook_script "$BEFORE_SYNC_SCRIPT" "BEFORE_SYNC_SCRIPT"
+  validate_hook_script "$AFTER_SYNC_SCRIPT" "AFTER_SYNC_SCRIPT"
 
   if ! [[ "$PUID" =~ ^[0-9]+$ ]]; then
     exit_failed "$EXIT_CONFIG_ERROR" "PUID must be a non-negative integer"

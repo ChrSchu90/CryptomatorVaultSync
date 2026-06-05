@@ -308,6 +308,22 @@ assert_file_contains_status ./tests/state/current-status failed
 assert_file_exists ./tests/state/last-error
 assert_file_contains_text ./tests/state/last-error "UMASK must be a valid octal file mode mask"
 
+log "TEST: Invalid BEFORE_SYNC_SCRIPT"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e BEFORE_SYNC_SCRIPT=/config/missing-before-sync.sh
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_contains_text ./tests/state/last-error "BEFORE_SYNC_SCRIPT does not exist"
+
+log "TEST: Invalid AFTER_SYNC_SCRIPT"
+assert_exit_code 2 \
+  docker_run \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e AFTER_SYNC_SCRIPT=/config/missing-before-sync.sh
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_contains_text ./tests/state/last-error "AFTER_SYNC_SCRIPT does not exist"
+
 log "TEST: Missing vault password"
 assert_exit_code 2 \
   docker_run
@@ -732,5 +748,43 @@ if [[ "$before" == "$after" ]]; then
 fi
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
+
+log "TEST: before and after sync hooks"
+docker_cleanup
+cat > ./tests/config/before-sync.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "before hook ran" > /output/before-hook-result
+EOF
+cat > ./tests/config/after-sync.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "after hook ran" > /output/after-hook-result
+EOF
+chmod +x ./tests/config/before-sync.sh ./tests/config/after-sync.sh
+echo "hello from hook test" > ./tests/sync/hook-test.txt
+assert_exit_code 0 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e BEFORE_SYNC_SCRIPT=/config/before-sync.sh \
+    -e AFTER_SYNC_SCRIPT=/config/after-sync.sh
+assert_file_contains_text ./tests/output/before-hook-result "before hook ran"
+assert_file_contains_text ./tests/output/after-hook-result "after hook ran"
+assert_file_contains_status ./tests/state/current-status stopped
+assert_file_exists ./tests/state/last-success
+
+log "TEST: BEFORE_SYNC_SCRIPT must be executable"
+docker_cleanup
+cat > ./tests/config/before-sync.sh <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod 644 ./tests/config/before-sync.sh
+assert_exit_code 2 \
+  docker_run_without_cleanup \
+    -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}" \
+    -e BEFORE_SYNC_SCRIPT=/config/before-sync.sh
+assert_file_contains_status ./tests/state/current-status failed
+assert_file_contains_text ./tests/state/last-error "BEFORE_SYNC_SCRIPT is not executable"
 
 log "All tests passed!"
