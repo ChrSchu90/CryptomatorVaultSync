@@ -332,7 +332,7 @@ mount_vault() {
       unlock_webdav || exit_failed "$EXIT_GENERAL_ERROR" "failed to mount vault using WebDAV"
       ;;
     *)
-      exit_failed "$EXIT_GENERAL_ERROR" "No active mount mode selected"
+      exit_failed "$EXIT_GENERAL_ERROR" "Invalid mount mode: $CRYPTOMATOR_MOUNT_MODE"
       ;;
   esac
 }
