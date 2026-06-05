@@ -366,7 +366,7 @@ AFTER_SYNC_SCRIPT=/config/after-sync.sh
 | Option   | Meaning                            |
 | -------- | ---------------------------------- |
 | `fuse`   | Uses Cryptomator CLI's Linux FUSE mount provider.     |
-| `webdav`   | ***NOT SUPOORTED YET*** Uses Cryptomator CLI's WebDAV fallback mounter and mounts it internally.       |
+| `webdav`   | ***NOT SUPPORTED YET*** Uses Cryptomator CLI's WebDAV fallback mounter and mounts it internally.       |
 
 To check `FUSE` availability on the host:
 
