@@ -127,7 +127,7 @@ validate_cron_expression() {
   read -r -a fields <<< "$SYNC_CRON"
 
   if [[ "${#fields[@]}" -ne 5 ]]; then
-    exit_failed "$EXIT_CONFIG_ERROR" "SYNC_CRON must use the standard 5-field format, for example: */5 * * * *"
+    exit_failed "$EXIT_CONFIG_ERROR" "SYNC_CRON must use the standard 5-field format, for example: 0 * * * *"
   fi
 }
 
