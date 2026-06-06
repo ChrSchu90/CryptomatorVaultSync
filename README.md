@@ -361,7 +361,7 @@ AFTER_SYNC_SCRIPT=/config/after-sync.sh
 
 > [!NOTE]
 > WebDAV currently starts the Cryptomator WebDAV endpoint but does not perform the local sync yet.
-> Support is planned, but currently exits with an error after the endpoint has been verified.
+> Support is planned, but currently not possible due to an [issue](https://github.com/cryptomator/cli/issues/102).
 
 | Option   | Meaning                            |
 | -------- | ---------------------------------- |
