@@ -274,7 +274,7 @@ Possible `current-status` values:
 | `RSYNC_ARGS` | `-rtvi --no-owner --no-group --no-perms` | Base rsync arguments. |
 | `RSYNC_EXTRA_ARGS` | empty | Additional rsync arguments. |
 | `MOUNT_TIMEOUT_SECONDS` | `60` | Timeout for mount operations. |
-| `SYNC_CRON` | empty | Cron schedule for scheduled mode. Leave empty for one-shot mode. Uses standard 5-field cron syntax, for example `*/5 * * * *`. |
+| `SYNC_CRON` | empty | Cron schedule for scheduled mode. Leave empty for one-shot mode. Uses standard 5-field cron syntax, for example `0 * * * *`. |
 | `UPSTREAM_ENABLED` | `false` | Enable optional rclone upstream sync after the encrypted vault has been updated. |
 | `UPSTREAM_CHECK` | `false` | If `true`, runs `rclone check` after each successful upstream sync/copy destination. This verifies that source and destination match, but can increase runtime and provider API usage. |
 | `UPSTREAM_FAIL_ACTION` | `continue` | Behavior when rclone or upstream check fails. `continue` marks the status as `upstream-error` and retries on the next scheduled cycle. `exit` marks the sync cycle as failed. One-shot mode always exits on upstream errors. |
@@ -590,13 +590,13 @@ Scheduled mode is handled by [supercronic](https://github.com/aptible/supercroni
 Set a cron expression:
 
 ```env
-SYNC_CRON=*/5 * * * *
+SYNC_CRON=0 * * * *
 ```
 
 In Docker Compose, quote cron expressions:
 
 ```yml
-SYNC_CRON: "*/5 * * * *"
+SYNC_CRON: "0 * * * *"
 ```
 
 The container starts a sync cycle according to the cron schedule. Sync cycles are protected against overlap. If a previous cycle is still running when the next scheduled run starts, that run is skipped.
