@@ -131,7 +131,7 @@ A typical host-side setup can look like this:
 │   ├── Documents/
 │   ├── Photos/
 │   └── Important.txt
-├── vault/
+├── vault-encrypted/
 │   ├── vault.cryptomator
 │   ├── masterkey.cryptomator
 │   └── d/
@@ -185,13 +185,13 @@ The directory must already contain an initialized Cryptomator vault. Create the 
 
 ### `/vault-decrypted`
 
-Internal temporary mount point used by the container.
+***Internal*** temporary mount point used by the container.
 
 Do **not** mount this directory from the host. Even if `/vault-decrypted` is bind-mounted, the host usually will not see the decrypted FUSE/WebDAV mount contents because the mount is created inside the container's mount namespace.
 
 ### `/config`
 
-Optional read-only configuration directory.
+**Optional** read-only configuration directory.
 
 It can contain:
 
@@ -208,7 +208,7 @@ Example config files:
 
 ### `/state`
 
-Optional writable state directory for status files.
+**Optional** writable state directory for status files.
 
 The container writes three files:
 
