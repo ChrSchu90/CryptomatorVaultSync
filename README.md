@@ -599,8 +599,6 @@ In Docker Compose, quote cron expressions:
 SYNC_CRON: "0 * * * *"
 ```
 
-The container starts a sync cycle according to the cron schedule. Sync cycles are protected against overlap. If a previous cycle is still running when the next scheduled run starts, that run is skipped.
-
 Each cycle will:
 
 1. Unlock the vault.
