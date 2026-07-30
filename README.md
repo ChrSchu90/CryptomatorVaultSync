@@ -127,10 +127,6 @@ A typical host-side setup can look like this:
 
 ```text
 /docker/cryptomator-vault-sync/
-├── sync/
-│   ├── Documents/
-│   ├── Photos/
-│   └── Important.txt
 ├── vault-encrypted/
 │   ├── vault.cryptomator
 │   ├── masterkey.cryptomator
