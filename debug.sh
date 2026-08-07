@@ -9,7 +9,7 @@ IMAGE_NAME=cryptomator-vault-sync:dev
 DOCKER_PLATFORM=linux/amd64 # linux/amd64 linux/arm64/v8
 CRYPTOMATOR_CLI_RELEASE=0.6.2
 SUPERCRONIC_RELEASE=0.2.48
-RCLONE_RELEASE=1.74.4
+RCLONE_RELEASE=1.75.0
 
 mkdir -p ./debug/sync ./debug/vault ./debug/config
 
