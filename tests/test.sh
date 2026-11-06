@@ -127,6 +127,13 @@ docker_run_capture_logs() {
   exit_code="$?"
   set -e
 
+  if [[ "$exit_code" -ne 0 ]]; then
+    echo "Container failed with exit code $exit_code" >&2
+    echo "--- Container output ---" >&2
+    cat ./tests/output/container.log >&2
+    echo "------------------------" >&2
+  fi
+
   # Should not be needed anymore since container uses host UID and GID
   #fix_test_file_permissions
   return "$exit_code"
