@@ -36,7 +36,6 @@ env:
 jobs:
   build:
     name: Build
-    #runs-on: ubuntu-latest
     runs-on: ubuntu-24.04
     permissions:
       packages: write # Docker push image to GHCR
