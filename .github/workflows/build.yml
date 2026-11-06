@@ -36,8 +36,7 @@ env:
 jobs:
   build:
     name: Build
-    #runs-on: ubuntu-latest
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     permissions:
       packages: write # Docker push image to GHCR
       id-token: write # GHCR auth and Cosign OIDC signing/verification

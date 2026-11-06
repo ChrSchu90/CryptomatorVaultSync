@@ -9,7 +9,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
 ```text
 📁 /sync
    ↓ rsync
-🔓 /vault-decrypted
+🔓 /tmp/vault-decrypted
    ↓ Cryptomator CLI
 🔒 /vault-encrypted
    ↓ rclone (optional)
@@ -25,7 +25,7 @@ Optionally, the encrypted vault can be synced to one or more upstream destinatio
 - [📁 Directory layout and volumes](#-directory-layout-and-volumes)
   - [`/sync`](#sync)
   - [`/vault-encrypted`](#vault-encrypted)
-  - [`/vault-decrypted`](#vault-decrypted)
+  - [`/tmp/vault-decrypted`](#tmpvault-decrypted)
   - [`/config`](#config)
   - [`/state`](#state)
 - [⚙️ Configuration](#️-configuration)
@@ -179,11 +179,13 @@ The directory must already contain an initialized Cryptomator vault. Create the 
 -v /path/to/vault:/vault-encrypted
 ```
 
-### `/vault-decrypted`
+### `/tmp/vault-decrypted`
 
-***Internal*** temporary mount point used by the container.
+***Internal*** temporary mount point used by the container. The default is `/tmp/vault-decrypted` (configured by `VAULT_DECRYPTED_DIR`).
 
-Do **not** mount this directory from the host. Even if `/vault-decrypted` is bind-mounted, the host usually will not see the decrypted FUSE/WebDAV mount contents because the mount is created inside the container's mount namespace.
+Do **not** bind-mount this directory from the host. The host usually cannot see the decrypted FUSE mount contents because the mount is created inside the container's mount namespace.
+
+The path under `/tmp` is intentional: on some hosts, the host's AppArmor policy for `fusermount3` rejects FUSE mounts at paths such as `/vault-decrypted` with `Permission denied`. Keep the default unless your host security policy explicitly allows another mount point. `--security-opt apparmor:unconfined` does not necessarily override a host-side `fusermount3` profile.
 
 ### `/config`
 
@@ -263,6 +265,7 @@ Possible `current-status` values:
 | `DRY_RUN` | `false` | Runs rsync in dry-run mode and skips upstream sync. No files are written to the vault or upstream destinations. `/state/last-success` is not updated. |
 | `SYNC_DIR` | `/sync` | Source directory inside the container. |
 | `VAULT_ENCRYPTED_DIR` | `/vault-encrypted` | Encrypted vault directory inside the container. |
+| `VAULT_DECRYPTED_DIR` | `/tmp/vault-decrypted` | Internal FUSE mount point. Do not bind-mount it from the host; other paths may be denied by the host AppArmor policy. |
 | `STATE_DIR` | `/state` | Directory for state files. |
 | `RSYNC_DELETE` | `false` | If `true`, delete files in the vault that no longer exist in `/sync`. Only enable this if `/sync` is the authoritative source. Use `DRY_RUN=true` first to review what would be deleted. |
 | `RSYNC_INPLACE` | `false` | Enables rsync `--inplace` when set to `true`. Disabled by default. |
@@ -731,7 +734,7 @@ Recommended checklist:
 | `/sync` | Mount read-only whenever possible. |
 | `/config` | Mount read-only and protect files such as `vault-password` and `rclone.conf`. |
 | `/state` | Keep writable, but do not store secrets there. |
-| `/vault-decrypted` | Do not mount from the host. It is an internal temporary mount point. |
+| `/tmp/vault-decrypted` | Do not bind-mount from the host. It is an internal temporary mount point; alternative paths may be restricted by AppArmor. |
 | Host mounts | Avoid broad mounts such as `/`, `/volume1`, or a full home directory. |
 | Network | Use `network_mode: none` when `UPSTREAM_ENABLED=false`. |
 | rclone | Protect `rclone.conf`, because it may contain cloud access tokens. |
