@@ -127,6 +127,13 @@ docker_run_capture_logs() {
   exit_code="$?"
   set -e
 
+  if [[ "$exit_code" -ne 0 ]]; then
+    echo "Container failed with exit code $exit_code" >&2
+    echo "--- Container output ---" >&2
+    cat ./tests/output/container.log >&2
+    echo "------------------------" >&2
+  fi
+
   # Should not be needed anymore since container uses host UID and GID
   #fix_test_file_permissions
   return "$exit_code"
@@ -223,7 +230,7 @@ assert_unlocked_vault_file_content() {
     bash -c '
       set -Eeuo pipefail
 
-      mkdir -p /vault-check
+      mkdir -p /tmp/vault-check
 
       printf "%s\n" "$CRYPTOMATOR_VAULT_PASSWORD" > /tmp/vault-password
       chmod 600 /tmp/vault-password
@@ -231,7 +238,7 @@ assert_unlocked_vault_file_content() {
       cryptomator-cli unlock \
         --password:stdin \
         --mounter=org.cryptomator.frontend.fuse.mount.LinuxFuseMountProvider \
-        --mountPoint=/vault-check \
+        --mountPoint=/tmp/vault-check \
         /vault-encrypted \
         < /tmp/vault-password \
         >/tmp/cryptomator-check.log 2>&1 &
@@ -239,10 +246,10 @@ assert_unlocked_vault_file_content() {
       pid="$!"
 
       cleanup_check_mount() {
-        fusermount3 -u /vault-check 2>/dev/null || \
-          fusermount -u /vault-check 2>/dev/null || \
-          umount /vault-check 2>/dev/null || \
-          umount -l /vault-check 2>/dev/null || \
+        fusermount3 -u /tmp/vault-check 2>/dev/null || \
+          fusermount -u /tmp/vault-check 2>/dev/null || \
+          umount /tmp/vault-check 2>/dev/null || \
+          umount -l /tmp/vault-check 2>/dev/null || \
           true
 
         if kill -0 "$pid" 2>/dev/null; then
@@ -254,7 +261,7 @@ assert_unlocked_vault_file_content() {
       trap cleanup_check_mount EXIT
 
       for _ in $(seq 1 30); do
-        if mountpoint -q /vault-check; then
+        if mountpoint -q /tmp/vault-check; then
           break
         fi
 
@@ -266,17 +273,17 @@ assert_unlocked_vault_file_content() {
         sleep 1
       done
 
-      if ! mountpoint -q /vault-check; then
+      if ! mountpoint -q /tmp/vault-check; then
         cat /tmp/cryptomator-check.log >&2 || true
         exit 1
       fi
 
-      if [[ ! -f "/vault-check/$VAULT_FILE" ]]; then
+      if [[ ! -f "/tmp/vault-check/$VAULT_FILE" ]]; then
         echo "Expected file does not exist in unlocked vault: $VAULT_FILE"
         exit 1
       fi
 
-      cmp /expected-file "/vault-check/$VAULT_FILE"
+      cmp /expected-file "/tmp/vault-check/$VAULT_FILE"
     '
 }
 
@@ -351,6 +358,7 @@ assert_exit_code 0 \
     -e CRYPTOMATOR_VAULT_PASSWORD="${VAULT_PASSWORD}"
 assert_file_contains_text ./tests/output/container.log "Preparing sync runtime user: ${HOST_UID}:${HOST_GID}"
 assert_file_contains_text ./tests/output/container.log "Switching sync process to ${HOST_UID}:${HOST_GID}"
+assert_file_contains_text ./tests/output/container.log "Unmounting Cryptomator vault: /tmp/vault-decrypted"
 assert_file_contains_status ./tests/state/current-status stopped
 assert_file_exists ./tests/state/last-success
 rm -f ./tests/state/current-status
